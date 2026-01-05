@@ -1,82 +1,85 @@
-package com.example.game;
+package com.example.game; // ← ★ここは元のまま！
 
 import com.badlogic.gdx.ApplicationAdapter;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
+import com.badlogic.gdx.graphics.GL20; // ← 追加: 透明度を使うために必要
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.ScreenUtils;
 
-public class Main extends ApplicationAdapter { // ★ファイル名がMain.java以外なら、ここの名前も合わせる
+public class Main extends ApplicationAdapter { // ★クラス名はファイル名に合わせてね
     SpriteBatch batch;
-    ShapeRenderer shapeRenderer; // 線を引くためのツール
-    Texture noteImg;             // ノーツの画像
-
-    // ノーツのリスト
+    ShapeRenderer shapeRenderer;
+    Texture noteImg;
     Array<Note> notes = new Array<>();
-    
-    // 時間管理用（音楽の代わり）
     float songPosition = 0;
 
     @Override
     public void create() {
         batch = new SpriteBatch();
         shapeRenderer = new ShapeRenderer();
-        
-        // assetsフォルダにある画像を指定
-        // (デフォルトで "libgdx.png" か "badlogic.jpg" があるはずです。確認してください)
-        noteImg = new Texture("libgdx.png"); 
+        noteImg = new Texture("libgdx.png"); // assetsにある画像名
 
-        // ★テスト用にノーツを登録してみる
-        // new Note(落ちてくる時間, レーン番号0~3)
-        notes.add(new Note(2.0f, 0)); // 2秒後に一番左
-        notes.add(new Note(3.0f, 1)); // 3秒後に左から2番目
-        notes.add(new Note(4.0f, 2)); // 4秒後に右から2番目
-        notes.add(new Note(5.0f, 3)); // 5秒後に一番右
-        
-        // 同時押しのテスト
+        // テスト用データ
+        notes.add(new Note(2.0f, 0));
+        notes.add(new Note(3.0f, 1));
+        notes.add(new Note(4.0f, 2));
+        notes.add(new Note(5.0f, 3));
         notes.add(new Note(6.0f, 1));
         notes.add(new Note(6.0f, 2));
     }
 
     @Override
     public void render() {
-        // 1. 画面を黒でクリア
         ScreenUtils.clear(0, 0, 0, 1);
-        
-        // 2. 時間を進める
         songPosition += Gdx.graphics.getDeltaTime();
 
-        // --- 3. レーンの枠線を描画 (ShapeRenderer) ---
+        // --- ★ここから追加機能：キー入力の反応 ---
+        
+        // 透明度(アルファ)を使えるようにする設定
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled); // 「塗りつぶし」モード
+        
+        // 4つのレーンを順番にチェック
+        for (int i = 0; i < GameConfig.LANE_COUNT; i++) {
+            // もし、そのレーンに対応するキーが押されていたら？
+            if (Gdx.input.isKeyPressed(GameConfig.KEY_MAPPING[i])) {
+                // 色をセット (黄色, 透明度0.5)
+                shapeRenderer.setColor(1, 1, 0, 0.5f);
+                
+                // レーンの場所に長方形を描く
+                float x = GameConfig.LANE_START_X + (i * GameConfig.LANE_WIDTH);
+                shapeRenderer.rect(x, 0, GameConfig.LANE_WIDTH, GameConfig.SCREEN_HEIGHT);
+            }
+        }
+        shapeRenderer.end();
+        // --- ★ここまで追加 ---
+
+
+        // --- 既存の描画処理 ---
+        
+        // レーンの枠線
         shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
         shapeRenderer.setColor(Color.GRAY);
-
-        // 判定ライン（横線）
         shapeRenderer.line(0, GameConfig.JUDGEMENT_LINE_Y, GameConfig.SCREEN_WIDTH, GameConfig.JUDGEMENT_LINE_Y);
-
-        // 縦のレーン区切り線（5本引く）
         for (int i = 0; i <= GameConfig.LANE_COUNT; i++) {
-            // GameConfigの定数を使ってX座標を計算
             float x = GameConfig.LANE_START_X + (i * GameConfig.LANE_WIDTH);
             shapeRenderer.line(x, 0, x, GameConfig.SCREEN_HEIGHT);
         }
         shapeRenderer.end();
 
-        // --- 4. ノーツの描画 (SpriteBatch) ---
+        // ノーツ描画
         batch.begin();
         for (Note note : notes) {
             if (note.active) {
-                // Y座標：「(叩く時間 -今の時間) × 速さ」 + 判定ライン位置
                 float y = GameConfig.JUDGEMENT_LINE_Y + (note.targetTime - songPosition) * GameConfig.NOTE_SPEED;
-
-                // X座標：「全体の開始位置」 + 「レーン番号 × 1レーンの幅」
                 float x = GameConfig.LANE_START_X + (note.lane * GameConfig.LANE_WIDTH);
-
-                // 画面内にある時だけ描画
                 if (y < GameConfig.SCREEN_HEIGHT && y > -100) {
-                    // ノーツの幅をレーン幅より少し小さく(左右-5px)して描画
                     batch.draw(noteImg, x + 5, y, GameConfig.LANE_WIDTH - 10, 64);
                 }
             }
