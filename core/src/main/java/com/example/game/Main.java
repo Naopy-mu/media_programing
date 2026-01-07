@@ -1,9 +1,8 @@
-package com.example.game; // ← ★元のまま！
+package com.example.game; // ★あなたのパッケージ名
 
 import com.badlogic.gdx.ApplicationAdapter;
 import com.badlogic.gdx.Gdx;
-import com.badlogic.gdx.Input;
-import com.badlogic.gdx.audio.Music; // ← ★追加：音楽用
+import com.badlogic.gdx.audio.Music;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.Texture;
@@ -19,7 +18,7 @@ public class Main extends ApplicationAdapter {
     ShapeRenderer shapeRenderer;
     Texture noteImg;
     BitmapFont font;
-    Music music; // ← ★追加：音楽変数
+    Music music;
 
     Array<Note> notes = new Array<>();
     float songPosition = 0;
@@ -31,61 +30,63 @@ public class Main extends ApplicationAdapter {
     public void create() {
         batch = new SpriteBatch();
         shapeRenderer = new ShapeRenderer();
-        noteImg = new Texture("libgdx.png");
+        noteImg = new Texture("libgdx.png"); // assetsにある画像
         font = new BitmapFont();
         font.getData().setScale(2.0f);
 
-        // ★追加：音楽の読み込みと再生
-        // assetsフォルダに bgm.mp3 を入れておくこと！
+        // ★音楽の読み込み
+        // ファイル名: "Timepiece Tower.mp3" (スペースあり、スペル修正済み)
         music = Gdx.audio.newMusic(Gdx.files.internal("Timepiece Tower.mp3"));
-        music.play(); // 再生開始
+        music.play();
 
-        // テストデータ
-        notes.add(new Note(2.0f, 0));
-        notes.add(new Note(3.0f, 1));
-        notes.add(new Note(4.0f, 2));
-        notes.add(new Note(5.0f, 3));
-        notes.add(new Note(6.0f, 1));
-        notes.add(new Note(7.0f, 2));
+        // ★譜面の読み込み
+        // assets/chart.csv からデータを読み込む
+        try {
+            notes = ChartLoader.loadChart("chart.csv");
+            System.out.println("譜面読み込み成功: " + notes.size + "個のノーツ");
+        } catch (Exception e) {
+            System.out.println("譜面読み込みエラー: " + e.getMessage());
+            // エラー時は空のリストにして落ちないようにする
+            notes = new Array<>();
+        }
     }
 
     @Override
     public void render() {
+        // 画面を黒でクリア
         ScreenUtils.clear(0, 0, 0, 1);
         
-        // ★変更：タイマーではなく「音楽の再生時間」を使う
-        // これで曲とズレなくなります
+        // 音楽再生位置を取得
         songPosition = music.getPosition();
 
-        // --- 1. 入力判定 ---
+        // --- 1. キー入力判定 (Input Logic) ---
         for (int i = 0; i < GameConfig.LANE_COUNT; i++) {
             if (Gdx.input.isKeyJustPressed(GameConfig.KEY_MAPPING[i])) {
                 checkHit(i);
             }
         }
 
-        // --- ★追加：MISS判定のチェック ---
-        // 通り過ぎたノーツがないか確認する
+        // --- 2. MISS判定 (Game Logic) ---
         Iterator<Note> iter = notes.iterator();
         while (iter.hasNext()) {
             Note note = iter.next();
-            // まだ生きていて、かつ 時間が通り過ぎていたら (0.2秒以上遅れたら)
+            // ノーツが有効で、判定ラインを大きく過ぎていたら (0.2秒遅れ)
             if (note.active && songPosition > note.targetTime + 0.2f) {
                 note.active = false; // 消す
-                message = "MISS..."; // メッセージ
+                message = "MISS...";
                 messageTimer = 1.0f;
             }
         }
 
-
-        // --- 2. 描画 ---
-        // (A) レーン光る処理
+        // --- 3. 描画処理 (Rendering) ---
+        
+        // (A) レーンが光るエフェクト
         Gdx.gl.glEnable(GL20.GL_BLEND);
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
         for (int i = 0; i < GameConfig.LANE_COUNT; i++) {
             if (Gdx.input.isKeyPressed(GameConfig.KEY_MAPPING[i])) {
-                shapeRenderer.setColor(1, 1, 0, 0.3f);
+                shapeRenderer.setColor(1, 1, 0, 0.3f); // 黄色 半透明
                 float x = GameConfig.LANE_START_X + (i * GameConfig.LANE_WIDTH);
                 shapeRenderer.rect(x, 0, GameConfig.LANE_WIDTH, GameConfig.SCREEN_HEIGHT);
             }
@@ -93,30 +94,34 @@ public class Main extends ApplicationAdapter {
         shapeRenderer.end();
         Gdx.gl.glDisable(GL20.GL_BLEND);
 
-        // (B) 枠線
+        // (B) 枠線と判定ライン
         shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
         shapeRenderer.setColor(Color.GRAY);
+        // 判定ライン
         shapeRenderer.line(0, GameConfig.JUDGEMENT_LINE_Y, GameConfig.SCREEN_WIDTH, GameConfig.JUDGEMENT_LINE_Y);
+        // 縦線
         for (int i = 0; i <= GameConfig.LANE_COUNT; i++) {
             float x = GameConfig.LANE_START_X + (i * GameConfig.LANE_WIDTH);
             shapeRenderer.line(x, 0, x, GameConfig.SCREEN_HEIGHT);
         }
         shapeRenderer.end();
 
-        // (C) ノーツ
+        // (C) ノーツの描画
         batch.begin();
         for (Note note : notes) {
             if (note.active) {
+                // Y座標の計算
                 float y = GameConfig.JUDGEMENT_LINE_Y + (note.targetTime - songPosition) * GameConfig.NOTE_SPEED;
                 float x = GameConfig.LANE_START_X + (note.lane * GameConfig.LANE_WIDTH);
                 
+                // 画面内にある時だけ描画
                 if (y < GameConfig.SCREEN_HEIGHT && y > -100) {
                     batch.draw(noteImg, x + 5, y, GameConfig.LANE_WIDTH - 10, 64);
                 }
             }
         }
 
-        // (D) メッセージと時間
+        // (D) メッセージと時間の描画
         if (messageTimer > 0) {
             font.draw(batch, message, 100, 300);
             messageTimer -= Gdx.graphics.getDeltaTime();
@@ -125,17 +130,21 @@ public class Main extends ApplicationAdapter {
         batch.end();
     }
 
+    // ヒット判定メソッド
     void checkHit(int lane) {
         for (Note note : notes) {
+            // 違うレーンや無効なノーツは無視
             if (note.lane != lane || !note.active) continue;
 
+            // 時間差（絶対値）
             float timeDiff = Math.abs(note.targetTime - songPosition);
 
-            if (timeDiff < 0.2f) { // 0.2秒以内ならHIT
+            // 0.2秒以内ならHIT
+            if (timeDiff < 0.2f) {
                 message = "PERFECT!!";
                 messageTimer = 1.0f; 
-                note.active = false; 
-                return; 
+                note.active = false; // 判定済みにする
+                return; // 1個叩いたら終了
             }
         }
     }
@@ -146,6 +155,6 @@ public class Main extends ApplicationAdapter {
         shapeRenderer.dispose();
         noteImg.dispose();
         font.dispose();
-        music.dispose(); // ← ★追加：音楽も後片付け
+        music.dispose(); // 音楽も破棄
     }
 }
