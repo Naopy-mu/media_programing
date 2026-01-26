@@ -4,8 +4,8 @@ import com.badlogic.gdx.Input;
 
 public class GameConfig {
     // 画面サイズ
-    public static final float SCREEN_WIDTH = 640;
-    public static final float SCREEN_HEIGHT = 480;
+    public static final float SCREEN_WIDTH = 1920;
+    public static final float SCREEN_HEIGHT = 1080;
 
     // レーンの設定
     public static final int LANE_COUNT = 4;        // 4レーン

@@ -35,16 +35,16 @@ public class Main extends ApplicationAdapter {
     float scorePerNote = 0;
     int gameState = 0; 
 
-    // ★3D遠近感の設定
-    final float VANISHING_POINT_Y = 550; 
+    // ★FHD(1920x1080)用の3D設定
+    final float VANISHING_POINT_Y = 1000; // 消失点を画面上部へ移動
     final float JUDGEMENT_LINE_Y = 50;   
     final float CAMERA_DEPTH = 1.0f;     
     
-    final float NEAR_WIDTH_TOTAL = 600;  
+    // レーン幅も広くする
+    final float NEAR_WIDTH_TOTAL = 1500; // 手前の幅をさらに広く
     final float FAR_WIDTH_TOTAL = 20;    
-    final float CENTER_X = 320;          
+    final float CENTER_X = 1920 / 2f;    // 画面中央 (960)
     
-    // ★追加：3Dモード用のスクロール速度（ここをいじると速さが変わります）
     final float SCROLL_SPEED_3D = 5.0f; 
 
     class Particle {
@@ -81,7 +81,8 @@ public class Main extends ApplicationAdapter {
         shapeRenderer = new ShapeRenderer();
         noteImg = new Texture("libgdx.png");
         font = new BitmapFont();
-        
+        font.getData().setScale(2.0f); // 画面が大きいので文字も大きく
+
         music = Gdx.audio.newMusic(Gdx.files.internal("Timepiece Tower.mp3"));
         music.setVolume(0.3f);
         music.setOnCompletionListener(music -> { gameState = 2; });
@@ -128,13 +129,15 @@ public class Main extends ApplicationAdapter {
 
     void drawTitle() {
         batch.begin();
-        font.getData().setScale(3.0f);
+        font.getData().setScale(4.0f); // タイトル大きく
         font.setColor(Color.CYAN);
-        font.draw(batch, "RHYTHM GAME", 150, 350);
-        font.getData().setScale(1.5f);
+        font.draw(batch, "RHYTHM GAME", CENTER_X - 250, 700);
+        
+        font.getData().setScale(2.0f);
         font.setColor(Color.WHITE);
-        font.draw(batch, "Press SPACE to Start", 180, 200);
+        font.draw(batch, "Press SPACE to Start", CENTER_X - 180, 500);
         batch.end();
+        
         if (Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) {
             if (hitSound != null) hitSound.play();
             startGame();
@@ -243,8 +246,6 @@ public class Main extends ApplicationAdapter {
         for (Note note : notes) {
             if (note.active) {
                 float timeRemains = note.targetTime - songPosition;
-                
-                // ★修正：GameConfig.NOTE_SPEED ではなく 3D用の速度定数(5.0f)を使う
                 float zDistance = timeRemains * SCROLL_SPEED_3D;
 
                 if (zDistance < -0.2f || zDistance > 10.0f) continue;
@@ -260,31 +261,35 @@ public class Main extends ApplicationAdapter {
         }
 
         if (messageTimer > 0) {
-            font.draw(batch, message, 100, 300);
+            font.draw(batch, message, CENTER_X - 50, 400); 
             messageTimer -= Gdx.graphics.getDeltaTime();
         }
         
-        font.draw(batch, "Time: " + String.format("%.2f", songPosition), 10, 470);
-        font.draw(batch, "Score: " + (int)score, 10, 440);
-        font.draw(batch, "Combo: " + combo, 10, 410);
+        // ★UI位置修正：画面上端(1080)に合わせて配置
+        font.draw(batch, "Time: " + String.format("%.2f", songPosition), 20, 1050);
+        font.draw(batch, "Score: " + (int)score, 20, 1010);
+        font.draw(batch, "Combo: " + combo, 20, 970);
         batch.end();
     }
 
     void drawResult() {
         batch.begin();
-        font.getData().setScale(4.0f);
+        font.getData().setScale(5.0f);
         font.setColor(Color.YELLOW);
-        font.draw(batch, "GAME CLEAR!!", 100, 400);
-        font.getData().setScale(3.0f);
+        font.draw(batch, "GAME CLEAR!!", CENTER_X - 300, 700);
+        
+        font.getData().setScale(4.0f);
         font.setColor(Color.WHITE);
-        font.draw(batch, "SCORE: " + (int)score, 150, 300);
+        font.draw(batch, "SCORE: " + (int)score, CENTER_X - 200, 550);
+        
         String rank = "C";
         if (score >= 900000) rank = "S";
         else if (score >= 800000) rank = "A";
         else if (score >= 700000) rank = "B";
-        font.draw(batch, "RANK: " + rank, 200, 200);
-        font.getData().setScale(1.5f);
-        font.draw(batch, "Press SPACE to Title", 180, 100);
+        font.draw(batch, "RANK: " + rank, CENTER_X - 100, 400);
+        
+        font.getData().setScale(2.0f);
+        font.draw(batch, "Press SPACE to Title", CENTER_X - 180, 200);
         batch.end();
         if (Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) gameState = 0; 
     }
