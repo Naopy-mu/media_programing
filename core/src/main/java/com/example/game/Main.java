@@ -4,7 +4,7 @@ import com.badlogic.gdx.ApplicationAdapter;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.audio.Music;
-import com.badlogic.gdx.audio.Sound; // ★追加：短い音用
+import com.badlogic.gdx.audio.Sound;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.Texture;
@@ -21,7 +21,7 @@ public class Main extends ApplicationAdapter {
     Texture noteImg;
     BitmapFont font;
     Music music;
-    Sound hitSound; // ★追加：ヒット音の変数
+    Sound hitSound; 
 
     Array<Note> notes = new Array<>();
     float songPosition = 0;
@@ -33,6 +33,8 @@ public class Main extends ApplicationAdapter {
     int combo = 0;
     float scorePerNote = 0;
 
+    // ★状態管理
+    // 0: タイトル, 1: ゲームプレイ, 2: リザルト
     int gameState = 0; 
 
     @Override
@@ -42,25 +44,27 @@ public class Main extends ApplicationAdapter {
         noteImg = new Texture("libgdx.png");
         font = new BitmapFont();
         
-        // 音楽読み込み
         music = Gdx.audio.newMusic(Gdx.files.internal("Timepiece Tower.mp3"));
+        music.setVolume(0.3f);
+        
+        // 曲が終わったらリザルト(2)へ
         music.setOnCompletionListener(music -> {
-            gameState = 1;
+            gameState = 2;
         });
 
-        // ★追加：効果音の読み込み (hit.mp3)
-        // assetsフォルダに hit.mp3 を入れておくこと！
+        // 効果音 (mp3)
         try {
             hitSound = Gdx.audio.newSound(Gdx.files.internal("hit.mp3"));
         } catch (Exception e) {
-            System.out.println("効果音が見つかりません: " + e.getMessage());
+            System.out.println("効果音エラー: " + e.getMessage());
         }
 
-        startGame(); 
+        // 最初はタイトル画面(0)なので、ここではゲームを開始しない
     }
 
+    // ゲームを開始するメソッド
     void startGame() {
-        gameState = 0; 
+        gameState = 1; // プレイ中へ
         score = 0;
         combo = 0;
         message = "";
@@ -81,26 +85,54 @@ public class Main extends ApplicationAdapter {
 
     @Override
     public void render() {
-        ScreenUtils.clear(0, 0, 0, 1);
+        ScreenUtils.clear(0, 0, 0, 1); // 背景黒
 
+        // ★状態によって画面を切り替える
         if (gameState == 0) {
-            updateAndDrawGame(); 
-        } else {
-            drawResult(); 
+            drawTitle(); // タイトル画面
+        } else if (gameState == 1) {
+            updateAndDrawGame(); // ゲーム画面
+        } else if (gameState == 2) {
+            drawResult(); // リザルト画面
         }
     }
 
+    // --- 0. タイトル画面 ---
+    void drawTitle() {
+        batch.begin();
+        
+        // タイトルロゴ
+        font.getData().setScale(3.0f);
+        font.setColor(Color.CYAN);
+        font.draw(batch, "RHYTHM GAME", 150, 350);
+        
+        // スタート案内
+        font.getData().setScale(1.5f);
+        font.setColor(Color.WHITE);
+        font.draw(batch, "Press SPACE to Start", 180, 200);
+
+        batch.end();
+
+        // スペースキーでゲーム開始
+        if (Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) {
+            // ここで効果音を鳴らすとかっこいい
+            if (hitSound != null) hitSound.play();
+            startGame();
+        }
+    }
+
+    // --- 1. ゲーム中の処理 ---
     void updateAndDrawGame() {
         songPosition = music.getPosition();
 
-        // 1. 入力判定
+        // 入力判定
         for (int i = 0; i < GameConfig.LANE_COUNT; i++) {
             if (Gdx.input.isKeyJustPressed(GameConfig.KEY_MAPPING[i])) {
                 checkHit(i);
             }
         }
 
-        // 2. MISS判定
+        // MISS判定
         Iterator<Note> iter = notes.iterator();
         while (iter.hasNext()) {
             Note note = iter.next();
@@ -112,7 +144,7 @@ public class Main extends ApplicationAdapter {
             }
         }
 
-        // 3. 描画
+        // 描画
         Gdx.gl.glEnable(GL20.GL_BLEND);
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
@@ -137,6 +169,7 @@ public class Main extends ApplicationAdapter {
 
         batch.begin();
         font.getData().setScale(2.0f);
+        font.setColor(Color.WHITE);
 
         for (Note note : notes) {
             if (note.active) {
@@ -160,6 +193,7 @@ public class Main extends ApplicationAdapter {
         batch.end();
     }
 
+    // --- 2. リザルト画面 ---
     void drawResult() {
         batch.begin();
         
@@ -179,12 +213,14 @@ public class Main extends ApplicationAdapter {
         font.draw(batch, "RANK: " + rank, 200, 200);
 
         font.getData().setScale(1.5f);
-        font.draw(batch, "Press SPACE to Retry", 180, 100);
+        // ★修正：タイトルに戻る案内
+        font.draw(batch, "Press SPACE to Title", 180, 100);
         
         batch.end();
 
+        // スペースキーでタイトル画面(0)へ戻る
         if (Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) {
-            startGame();
+            gameState = 0; 
         }
     }
 
@@ -199,10 +235,7 @@ public class Main extends ApplicationAdapter {
                 score += scorePerNote;
                 combo++; 
                 
-                // ★追加：ヒット音を再生
-                if (hitSound != null) {
-                    hitSound.play();
-                }
+                if (hitSound != null) hitSound.play();
                 
                 return; 
             }
@@ -216,7 +249,6 @@ public class Main extends ApplicationAdapter {
         noteImg.dispose();
         font.dispose();
         music.dispose();
-        // ★追加：効果音の後片付け
         if (hitSound != null) hitSound.dispose();
     }
 }
