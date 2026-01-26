@@ -24,18 +24,63 @@ public class Main extends ApplicationAdapter {
     Sound hitSound; 
 
     Array<Note> notes = new Array<>();
-    float songPosition = 0;
     
+    Array<Particle> particles = new Array<>(); 
+    Array<Ripple> ripples = new Array<>();     
+    
+    float songPosition = 0;
     String message = "";
     float messageTimer = 0;
-
     float score = 0;
     int combo = 0;
     float scorePerNote = 0;
-
-    // ★状態管理
-    // 0: タイトル, 1: ゲームプレイ, 2: リザルト
     int gameState = 0; 
+
+    // ★修正1：キラキラも少し範囲を小さくする
+    class Particle {
+        float x, y;
+        float vx, vy;
+        float life;
+        float maxLife;
+        Color color;
+
+        Particle(float x, float y) {
+            this.x = x;
+            this.y = y;
+            double angle = Math.random() * Math.PI * 2;
+            
+            // ★変更点：飛び散るスピードを抑えめに (300+200 -> 150+100)
+            float speed = (float)(Math.random() * 150 + 100); 
+            
+            this.vx = (float)Math.cos(angle) * speed;
+            this.vy = (float)Math.sin(angle) * speed;
+            
+            this.maxLife = (float)(Math.random() * 0.4 + 0.2); 
+            this.life = this.maxLife;
+            
+            this.color = new Color(0.5f, 0.8f, 1f, 1f); 
+        }
+    }
+
+    // ★修正2：波紋の最大サイズをノーツ幅に合わせる
+    class Ripple {
+        float x, y;
+        float radius;     
+        float maxRadius;  
+        float life;       
+        
+        Ripple(float x, float y) {
+            this.x = x;
+            this.y = y;
+            this.radius = 5; // 初期サイズも少し小さく
+            
+            // ★変更点：最大半径を「レーン幅の半分」にする
+            // これで直径がちょうどレーン幅（ノーツの幅）と同じになります
+            this.maxRadius = GameConfig.LANE_WIDTH / 2f; 
+            
+            this.life = 0.4f; // 消えるまでの時間も少し短くしてキレを出す
+        }
+    }
 
     @Override
     public void create() {
@@ -46,29 +91,21 @@ public class Main extends ApplicationAdapter {
         
         music = Gdx.audio.newMusic(Gdx.files.internal("Timepiece Tower.mp3"));
         music.setVolume(0.3f);
-        
-        // 曲が終わったらリザルト(2)へ
-        music.setOnCompletionListener(music -> {
-            gameState = 2;
-        });
+        music.setOnCompletionListener(music -> { gameState = 2; });
 
-        // 効果音 (mp3)
         try {
             hitSound = Gdx.audio.newSound(Gdx.files.internal("hit.mp3"));
-        } catch (Exception e) {
-            System.out.println("効果音エラー: " + e.getMessage());
-        }
-
-        // 最初はタイトル画面(0)なので、ここではゲームを開始しない
+        } catch (Exception e) {}
     }
 
-    // ゲームを開始するメソッド
     void startGame() {
-        gameState = 1; // プレイ中へ
+        gameState = 1; 
         score = 0;
         combo = 0;
         message = "";
         songPosition = 0;
+        particles.clear(); 
+        ripples.clear(); 
         
         try {
             notes = ChartLoader.loadChart("chart.csv");
@@ -85,54 +122,40 @@ public class Main extends ApplicationAdapter {
 
     @Override
     public void render() {
-        ScreenUtils.clear(0, 0, 0, 1); // 背景黒
+        ScreenUtils.clear(0, 0, 0, 1);
 
-        // ★状態によって画面を切り替える
-        if (gameState == 0) {
-            drawTitle(); // タイトル画面
-        } else if (gameState == 1) {
-            updateAndDrawGame(); // ゲーム画面
-        } else if (gameState == 2) {
-            drawResult(); // リザルト画面
-        }
+        if (gameState == 0) drawTitle();
+        else if (gameState == 1) updateAndDrawGame();
+        else if (gameState == 2) drawResult();
     }
 
-    // --- 0. タイトル画面 ---
     void drawTitle() {
         batch.begin();
-        
-        // タイトルロゴ
         font.getData().setScale(3.0f);
         font.setColor(Color.CYAN);
         font.draw(batch, "RHYTHM GAME", 150, 350);
-        
-        // スタート案内
         font.getData().setScale(1.5f);
         font.setColor(Color.WHITE);
         font.draw(batch, "Press SPACE to Start", 180, 200);
-
         batch.end();
 
-        // スペースキーでゲーム開始
         if (Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) {
-            // ここで効果音を鳴らすとかっこいい
             if (hitSound != null) hitSound.play();
             startGame();
         }
     }
 
-    // --- 1. ゲーム中の処理 ---
     void updateAndDrawGame() {
         songPosition = music.getPosition();
 
-        // 入力判定
+        // 1. 入力
         for (int i = 0; i < GameConfig.LANE_COUNT; i++) {
             if (Gdx.input.isKeyJustPressed(GameConfig.KEY_MAPPING[i])) {
                 checkHit(i);
             }
         }
 
-        // MISS判定
+        // 2. MISS判定
         Iterator<Note> iter = notes.iterator();
         while (iter.hasNext()) {
             Note note = iter.next();
@@ -144,7 +167,8 @@ public class Main extends ApplicationAdapter {
             }
         }
 
-        // 描画
+        // 3. 描画
+        // (A) レーン
         Gdx.gl.glEnable(GL20.GL_BLEND);
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
@@ -156,7 +180,6 @@ public class Main extends ApplicationAdapter {
             }
         }
         shapeRenderer.end();
-        Gdx.gl.glDisable(GL20.GL_BLEND);
 
         shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
         shapeRenderer.setColor(Color.GRAY);
@@ -167,6 +190,50 @@ public class Main extends ApplicationAdapter {
         }
         shapeRenderer.end();
 
+        // (B) 波紋とキラキラ
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE); 
+        
+        // --- 波紋 ---
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
+        Iterator<Ripple> rIter = ripples.iterator();
+        while (rIter.hasNext()) {
+            Ripple r = rIter.next();
+            r.radius += (r.maxRadius - r.radius) * 8.0f * Gdx.graphics.getDeltaTime(); // 広がる速度を少し速く
+            r.life -= Gdx.graphics.getDeltaTime();
+
+            if (r.life <= 0) {
+                rIter.remove();
+            } else {
+                float alpha = r.life * 2.5f; 
+                shapeRenderer.setColor(0.2f, 1.0f, 1.0f, alpha); 
+                shapeRenderer.circle(r.x, r.y, r.radius); 
+            }
+        }
+        shapeRenderer.end();
+
+        // --- キラキラ ---
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+        Iterator<Particle> pIter = particles.iterator();
+        while (pIter.hasNext()) {
+            Particle p = pIter.next();
+            p.x += p.vx * Gdx.graphics.getDeltaTime();
+            p.y += p.vy * Gdx.graphics.getDeltaTime();
+            p.life -= Gdx.graphics.getDeltaTime();
+
+            if (p.life <= 0) {
+                pIter.remove();
+            } else {
+                float size = (p.life / p.maxLife) * 10.0f; // 粒子も少し小さく
+                shapeRenderer.setColor(0.7f, 0.9f, 1.0f, p.life); 
+                shapeRenderer.rect(p.x - size/2, p.y - size/2, size, size);
+            }
+        }
+        shapeRenderer.end();
+        
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+
+
+        // (C) ノーツとUI
         batch.begin();
         font.getData().setScale(2.0f);
         font.setColor(Color.WHITE);
@@ -193,34 +260,31 @@ public class Main extends ApplicationAdapter {
         batch.end();
     }
 
-    // --- 2. リザルト画面 ---
     void drawResult() {
         batch.begin();
-        
         font.getData().setScale(4.0f);
         font.setColor(Color.YELLOW);
         font.draw(batch, "GAME CLEAR!!", 100, 400);
-
         font.getData().setScale(3.0f);
         font.setColor(Color.WHITE);
         font.draw(batch, "SCORE: " + (int)score, 150, 300);
-
         String rank = "C";
         if (score >= 900000) rank = "S";
         else if (score >= 800000) rank = "A";
         else if (score >= 700000) rank = "B";
-
         font.draw(batch, "RANK: " + rank, 200, 200);
-
         font.getData().setScale(1.5f);
-        // ★修正：タイトルに戻る案内
         font.draw(batch, "Press SPACE to Title", 180, 100);
-        
         batch.end();
-
-        // スペースキーでタイトル画面(0)へ戻る
         if (Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) {
             gameState = 0; 
+        }
+    }
+
+    void spawnEffects(float x, float y) {
+        ripples.add(new Ripple(x, y));
+        for (int i = 0; i < 20; i++) {
+            particles.add(new Particle(x, y));
         }
     }
 
@@ -234,9 +298,11 @@ public class Main extends ApplicationAdapter {
                 note.active = false; 
                 score += scorePerNote;
                 combo++; 
-                
                 if (hitSound != null) hitSound.play();
                 
+                float hitX = GameConfig.LANE_START_X + (lane * GameConfig.LANE_WIDTH) + (GameConfig.LANE_WIDTH / 2);
+                spawnEffects(hitX, GameConfig.JUDGEMENT_LINE_Y + 30);
+
                 return; 
             }
         }
