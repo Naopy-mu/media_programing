@@ -2,6 +2,7 @@ package com.example.game;
 
 import com.badlogic.gdx.ApplicationAdapter;
 import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.Input;
 import com.badlogic.gdx.audio.Music;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
@@ -26,10 +27,12 @@ public class Main extends ApplicationAdapter {
     String message = "";
     float messageTimer = 0;
 
-    // スコア計算用の変数
     float score = 0;
     int combo = 0;
     float scorePerNote = 0;
+
+    // ★追加：ゲームの状態 (0=プレイ中, 1=リザルト)
+    int gameState = 0; 
 
     @Override
     public void create() {
@@ -37,40 +40,65 @@ public class Main extends ApplicationAdapter {
         shapeRenderer = new ShapeRenderer();
         noteImg = new Texture("libgdx.png");
         font = new BitmapFont();
-        font.getData().setScale(2.0f);
-
+        
         // 音楽読み込み
         music = Gdx.audio.newMusic(Gdx.files.internal("Timepiece Tower.mp3"));
-        music.play();
+        
+        // ★追加：曲が終わったら「リザルト状態」にする設定
+        music.setOnCompletionListener(music -> {
+            gameState = 1; // 状態を1(リザルト)に切り替え
+            System.out.println("曲が終了しました。リザルト画面へ移動します。");
+        });
 
-        // 譜面読み込み
+        startGame(); // ゲーム開始処理
+    }
+
+    // ゲームを初期化して開始するメソッド
+    void startGame() {
+        gameState = 0; // プレイ中
+        score = 0;
+        combo = 0;
+        message = "";
+        songPosition = 0;
+        
+        // 譜面の再読み込み
         try {
             notes = ChartLoader.loadChart("chart.csv");
-            System.out.println("譜面読み込み成功: " + notes.size + "個のノーツ");
-            
-            // 満点(100万点)計算
             if (notes.size > 0) {
                 scorePerNote = 1000000f / notes.size;
             }
         } catch (Exception e) {
-            System.out.println("譜面読み込みエラー: " + e.getMessage());
             notes = new Array<>();
         }
+
+        music.stop();
+        music.play();
     }
 
     @Override
     public void render() {
         ScreenUtils.clear(0, 0, 0, 1);
+
+        // ★状態によって描画を分ける
+        if (gameState == 0) {
+            updateAndDrawGame(); // ゲーム画面
+        } else {
+            drawResult(); // リザルト画面
+        }
+    }
+
+    // --- ゲーム中の処理 ---
+    void updateAndDrawGame() {
         songPosition = music.getPosition();
 
-        // --- 1. キー入力判定 ---
+        // 1. 入力判定
         for (int i = 0; i < GameConfig.LANE_COUNT; i++) {
             if (Gdx.input.isKeyJustPressed(GameConfig.KEY_MAPPING[i])) {
                 checkHit(i);
             }
         }
 
-        // --- 2. MISS判定 ---
+        // 2. MISS判定
         Iterator<Note> iter = notes.iterator();
         while (iter.hasNext()) {
             Note note = iter.next();
@@ -78,12 +106,11 @@ public class Main extends ApplicationAdapter {
                 note.active = false;
                 message = "MISS...";
                 messageTimer = 1.0f;
-                combo = 0; // コンボ切れ
+                combo = 0; 
             }
         }
 
-        // --- 3. 描画処理 ---
-        
+        // 3. 描画
         // (A) レーン発光
         Gdx.gl.glEnable(GL20.GL_BLEND);
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
@@ -108,10 +135,10 @@ public class Main extends ApplicationAdapter {
         }
         shapeRenderer.end();
 
-        // (C) 画像と文字の描画（ここが重要！）
-        batch.begin(); // ★ここからお絵かき開始
-        
-        // ノーツ
+        // (C) 画像と文字
+        batch.begin();
+        font.getData().setScale(2.0f); // ゲーム中は文字サイズ2
+
         for (Note note : notes) {
             if (note.active) {
                 float y = GameConfig.JUDGEMENT_LINE_Y + (note.targetTime - songPosition) * GameConfig.NOTE_SPEED;
@@ -122,32 +149,60 @@ public class Main extends ApplicationAdapter {
             }
         }
 
-        // メッセージ
         if (messageTimer > 0) {
             font.draw(batch, message, 100, 300);
             messageTimer -= Gdx.graphics.getDeltaTime();
         }
         
-        // 情報表示
         font.draw(batch, "Time: " + String.format("%.2f", songPosition), 10, 470);
         font.draw(batch, "Score: " + (int)score, 10, 440);
         font.draw(batch, "Combo: " + combo, 10, 410);
         
-        batch.end(); // ★すべて描き終わってから終了！
+        batch.end();
+    }
+
+    // --- ★追加：リザルト画面の描画処理 ---
+    void drawResult() {
+        batch.begin();
+        
+        // 大きな文字で「CLEAR!!」
+        font.getData().setScale(4.0f);
+        font.setColor(Color.YELLOW);
+        font.draw(batch, "GAME CLEAR!!", 100, 400);
+
+        // 最終スコア表示
+        font.getData().setScale(3.0f);
+        font.setColor(Color.WHITE);
+        font.draw(batch, "SCORE: " + (int)score, 150, 300);
+
+        // ランク判定（簡易版）
+        String rank = "C";
+        if (score >= 900000) rank = "S";
+        else if (score >= 800000) rank = "A";
+        else if (score >= 700000) rank = "B";
+
+        font.draw(batch, "RANK: " + rank, 200, 200);
+
+        // リトライ案内
+        font.getData().setScale(1.5f);
+        font.draw(batch, "Press SPACE to Retry", 180, 100);
+        
+        batch.end();
+
+        // スペースキーでリトライ
+        if (Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) {
+            startGame();
+        }
     }
 
     void checkHit(int lane) {
         for (Note note : notes) {
             if (note.lane != lane || !note.active) continue;
-
             float timeDiff = Math.abs(note.targetTime - songPosition);
-
             if (timeDiff < 0.2f) {
                 message = "PERFECT!!";
                 messageTimer = 1.0f; 
                 note.active = false; 
-                
-                // スコア加算
                 score += scorePerNote;
                 combo++; 
                 return; 
