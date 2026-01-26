@@ -28,31 +28,35 @@ public class Main extends ApplicationAdapter {
     Array<Ripple> ripples = new Array<>();     
     
     float songPosition = 0;
+    
     String message = "";
+    String timingMessage = ""; 
     float messageTimer = 0;
+    Color messageColor = Color.WHITE; 
+    
     float score = 0;
     int combo = 0;
     float scorePerNote = 0;
     int gameState = 0; 
 
-    // ★FHD(1920x1080)用の3D設定
-    final float VANISHING_POINT_Y = 1000; // 消失点を画面上部へ移動
+    // 判定幅の設定（秒単位）
+    final float WINDOW_THEORY  = 0.025f; // ±25ms (理論値)
+    final float WINDOW_PERFECT = 0.05f;  // ±50ms (通常PERFECT)
+    final float WINDOW_GOOD    = 0.10f;  // ±100ms (GOOD)
+
+    // FHD(1920x1080)用の3D設定
+    final float VANISHING_POINT_Y = 1000; 
     final float JUDGEMENT_LINE_Y = 50;   
     final float CAMERA_DEPTH = 1.0f;     
-    
-    // レーン幅も広くする
-    final float NEAR_WIDTH_TOTAL = 1500; // 手前の幅をさらに広く
+    final float NEAR_WIDTH_TOTAL = 1500; 
     final float FAR_WIDTH_TOTAL = 20;    
-    final float CENTER_X = 1920 / 2f;    // 画面中央 (960)
-    
+    final float CENTER_X = 1920 / 2f;    
     final float SCROLL_SPEED_3D = 5.0f; 
 
     class Particle {
-        float x, y;
-        float vx, vy;
-        float life, maxLife;
+        float x, y, vx, vy, life, maxLife;
         Color color;
-        Particle(float x, float y) {
+        Particle(float x, float y, Color c) { 
             this.x = x; this.y = y;
             double angle = Math.random() * Math.PI * 2;
             float speed = (float)(Math.random() * 150 + 100); 
@@ -60,18 +64,19 @@ public class Main extends ApplicationAdapter {
             this.vy = (float)Math.sin(angle) * speed;
             this.maxLife = (float)(Math.random() * 0.4 + 0.2); 
             this.life = this.maxLife;
-            this.color = new Color(0.5f, 0.8f, 1f, 1f); 
+            this.color = c; 
         }
     }
 
     class Ripple {
-        float x, y;
-        float radius, maxRadius, life;
-        Ripple(float x, float y, float width) {
+        float x, y, radius, maxRadius, life;
+        Color color;
+        Ripple(float x, float y, float width, Color c) {
             this.x = x; this.y = y;
             this.radius = 5; 
             this.maxRadius = width / 1.5f; 
             this.life = 0.4f; 
+            this.color = c;
         }
     }
 
@@ -81,7 +86,7 @@ public class Main extends ApplicationAdapter {
         shapeRenderer = new ShapeRenderer();
         noteImg = new Texture("libgdx.png");
         font = new BitmapFont();
-        font.getData().setScale(2.0f); // 画面が大きいので文字も大きく
+        font.getData().setScale(2.0f); 
 
         music = Gdx.audio.newMusic(Gdx.files.internal("Timepiece Tower.mp3"));
         music.setVolume(0.3f);
@@ -91,7 +96,7 @@ public class Main extends ApplicationAdapter {
     }
 
     void startGame() {
-        gameState = 1; score = 0; combo = 0; message = ""; songPosition = 0;
+        gameState = 1; score = 0; combo = 0; message = ""; timingMessage = ""; songPosition = 0;
         particles.clear(); ripples.clear(); 
         try {
             notes = ChartLoader.loadChart("chart.csv");
@@ -108,18 +113,9 @@ public class Main extends ApplicationAdapter {
         else if (gameState == 2) drawResult();
     }
 
-    float getScale(float zDistance) {
-        return CAMERA_DEPTH / (CAMERA_DEPTH + zDistance);
-    }
-
-    float getScreenY(float scale) {
-        return VANISHING_POINT_Y - (VANISHING_POINT_Y - JUDGEMENT_LINE_Y) * scale;
-    }
-    
-    float getLaneWidth(float scale) {
-        return NEAR_WIDTH_TOTAL * scale / 4.0f; 
-    }
-
+    float getScale(float zDistance) { return CAMERA_DEPTH / (CAMERA_DEPTH + zDistance); }
+    float getScreenY(float scale) { return VANISHING_POINT_Y - (VANISHING_POINT_Y - JUDGEMENT_LINE_Y) * scale; }
+    float getLaneWidth(float scale) { return NEAR_WIDTH_TOTAL * scale / 4.0f; }
     float getLaneCenterX(int lane, float scale) {
         float totalW = NEAR_WIDTH_TOTAL * scale;
         float startX = CENTER_X - (totalW / 2.0f);
@@ -129,15 +125,13 @@ public class Main extends ApplicationAdapter {
 
     void drawTitle() {
         batch.begin();
-        font.getData().setScale(4.0f); // タイトル大きく
+        font.getData().setScale(4.0f); 
         font.setColor(Color.CYAN);
         font.draw(batch, "RHYTHM GAME", CENTER_X - 250, 700);
-        
         font.getData().setScale(2.0f);
         font.setColor(Color.WHITE);
         font.draw(batch, "Press SPACE to Start", CENTER_X - 180, 500);
         batch.end();
-        
         if (Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) {
             if (hitSound != null) hitSound.play();
             startGame();
@@ -156,8 +150,13 @@ public class Main extends ApplicationAdapter {
         Iterator<Note> iter = notes.iterator();
         while (iter.hasNext()) {
             Note note = iter.next();
-            if (note.active && songPosition > note.targetTime + 0.2f) {
-                note.active = false; message = "MISS..."; messageTimer = 1.0f; combo = 0; 
+            if (note.active && songPosition > note.targetTime + WINDOW_GOOD) {
+                note.active = false; 
+                message = "MISS..."; 
+                timingMessage = ""; 
+                messageColor = Color.GRAY;
+                messageTimer = 1.0f; 
+                combo = 0; 
             }
         }
 
@@ -167,22 +166,17 @@ public class Main extends ApplicationAdapter {
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
         
         for (int i = 0; i < GameConfig.LANE_COUNT; i++) {
-            if (Gdx.input.isKeyPressed(GameConfig.KEY_MAPPING[i])) {
-                shapeRenderer.setColor(1, 1, 0, 0.3f);
-            } else {
-                shapeRenderer.setColor(0.2f, 0.2f, 0.2f, 0.5f);
-            }
+            if (Gdx.input.isKeyPressed(GameConfig.KEY_MAPPING[i])) shapeRenderer.setColor(1, 1, 0, 0.3f);
+            else shapeRenderer.setColor(0.2f, 0.2f, 0.2f, 0.5f);
 
             float scaleNear = getScale(0); 
             float x1 = getLaneCenterX(i, scaleNear) - getLaneWidth(scaleNear)/2;
             float x2 = getLaneCenterX(i, scaleNear) + getLaneWidth(scaleNear)/2;
             float y1 = getScreenY(scaleNear); 
-
             float scaleFar = getScale(10.0f); 
             float x3 = getLaneCenterX(i, scaleFar) + getLaneWidth(scaleFar)/2;
             float x4 = getLaneCenterX(i, scaleFar) - getLaneWidth(scaleFar)/2;
             float y2 = getScreenY(scaleFar);
-
             shapeRenderer.triangle(x1, 0, x2, 0, x3, y2); 
             shapeRenderer.triangle(x1, 0, x3, y2, x4, y2);
         }
@@ -191,16 +185,13 @@ public class Main extends ApplicationAdapter {
         shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
         shapeRenderer.setColor(Color.GRAY);
         shapeRenderer.line(0, JUDGEMENT_LINE_Y, GameConfig.SCREEN_WIDTH, JUDGEMENT_LINE_Y); 
-        
         for (int i = 0; i <= GameConfig.LANE_COUNT; i++) {
             float scaleNear = getScale(0);
             float scaleFar = getScale(10.0f); 
-            
             float xNear = (CENTER_X - NEAR_WIDTH_TOTAL/2) + (NEAR_WIDTH_TOTAL/4)*i;
             float totalWFar = NEAR_WIDTH_TOTAL * scaleFar;
             float xFar = (CENTER_X - totalWFar/2) + (totalWFar/4)*i;
             float yFar = getScreenY(scaleFar);
-
             shapeRenderer.line(xNear, 0, xFar, yFar);
         }
         shapeRenderer.end();
@@ -214,7 +205,7 @@ public class Main extends ApplicationAdapter {
             r.life -= Gdx.graphics.getDeltaTime();
             if (r.life <= 0) rIter.remove();
             else {
-                shapeRenderer.setColor(0.2f, 1.0f, 1.0f, r.life * 2.5f);
+                shapeRenderer.setColor(r.color.r, r.color.g, r.color.b, r.life * 2.5f);
                 shapeRenderer.circle(r.x, r.y, r.radius); 
             }
         }
@@ -230,15 +221,13 @@ public class Main extends ApplicationAdapter {
             if (p.life <= 0) pIter.remove();
             else {
                 float size = (p.life / p.maxLife) * 10.0f;
-                shapeRenderer.setColor(0.7f, 0.9f, 1.0f, p.life);
+                shapeRenderer.setColor(p.color.r, p.color.g, p.color.b, p.life);
                 shapeRenderer.rect(p.x - size/2, p.y - size/2, size, size);
             }
         }
         shapeRenderer.end();
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
 
-
-        // (C) ノーツ描画
         batch.begin();
         font.getData().setScale(2.0f);
         font.setColor(Color.WHITE);
@@ -247,26 +236,34 @@ public class Main extends ApplicationAdapter {
             if (note.active) {
                 float timeRemains = note.targetTime - songPosition;
                 float zDistance = timeRemains * SCROLL_SPEED_3D;
-
                 if (zDistance < -0.2f || zDistance > 10.0f) continue;
-
                 float scale = getScale(zDistance);
                 float drawY = getScreenY(scale);
                 float drawW = getLaneWidth(scale);
                 float drawX = getLaneCenterX(note.lane, scale);
                 float drawH = 64f * scale; 
-
                 batch.draw(noteImg, drawX - drawW/2 + 2, drawY, drawW - 4, drawH);
             }
         }
 
         if (messageTimer > 0) {
-            font.draw(batch, message, CENTER_X - 50, 400); 
+            font.setColor(messageColor);
+            font.getData().setScale(2.5f);
+            font.draw(batch, message, CENTER_X - 80, 450); 
+            
+            if (!timingMessage.isEmpty()) {
+                if (timingMessage.equals("FAST")) font.setColor(Color.RED);
+                else font.setColor(Color.BLUE);
+                font.getData().setScale(1.5f);
+                font.draw(batch, timingMessage, CENTER_X - 40, 400);
+            }
             messageTimer -= Gdx.graphics.getDeltaTime();
         }
         
-        // ★UI位置修正：画面上端(1080)に合わせて配置
+        font.setColor(Color.WHITE);
+        font.getData().setScale(2.0f);
         font.draw(batch, "Time: " + String.format("%.2f", songPosition), 20, 1050);
+        // ★修正：スコアは小数点以下を切り捨てて表示
         font.draw(batch, "Score: " + (int)score, 20, 1010);
         font.draw(batch, "Combo: " + combo, 20, 970);
         batch.end();
@@ -277,43 +274,73 @@ public class Main extends ApplicationAdapter {
         font.getData().setScale(5.0f);
         font.setColor(Color.YELLOW);
         font.draw(batch, "GAME CLEAR!!", CENTER_X - 300, 700);
-        
         font.getData().setScale(4.0f);
         font.setColor(Color.WHITE);
         font.draw(batch, "SCORE: " + (int)score, CENTER_X - 200, 550);
         
+        // ★修正：ランク判定も理論値スコアに対応
         String rank = "C";
-        if (score >= 900000) rank = "S";
+        if (score >= 1000000) rank = "SSS"; // 理論値または全PERFECT以上
+        else if (score >= 900000) rank = "S";
         else if (score >= 800000) rank = "A";
         else if (score >= 700000) rank = "B";
-        font.draw(batch, "RANK: " + rank, CENTER_X - 100, 400);
         
+        font.draw(batch, "RANK: " + rank, CENTER_X - 100, 400);
         font.getData().setScale(2.0f);
         font.draw(batch, "Press SPACE to Title", CENTER_X - 180, 200);
         batch.end();
         if (Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) gameState = 0; 
     }
 
-    void spawnEffects(float x, float y, float width) {
-        ripples.add(new Ripple(x, y, width));
-        for (int i = 0; i < 20; i++) particles.add(new Particle(x, y));
+    void spawnEffects(float x, float y, float width, Color color) {
+        ripples.add(new Ripple(x, y, width, color));
+        for (int i = 0; i < 20; i++) particles.add(new Particle(x, y, color));
     }
 
     void checkHit(int lane) {
         for (Note note : notes) {
             if (note.lane != lane || !note.active) continue;
-            float timeDiff = Math.abs(note.targetTime - songPosition);
-            if (timeDiff < 0.2f) {
-                message = "PERFECT!!"; messageTimer = 1.0f; 
-                note.active = false; score += scorePerNote; combo++; 
-                if (hitSound != null) hitSound.play();
+            
+            float diff = note.targetTime - songPosition;
+            float absDiff = Math.abs(diff);
+
+            if (absDiff > WINDOW_GOOD) continue; 
+
+            note.active = false; 
+            String fastLateInfo = (diff > 0) ? "FAST" : "LATE";
+
+            // ① 理論値 (±25ms)
+            if (absDiff <= WINDOW_THEORY) {
+                message = "PERFECT!!";
+                messageColor = Color.CYAN;
+                timingMessage = ""; 
                 
-                float scale = getScale(0);
-                float hitX = getLaneCenterX(lane, scale);
-                float hitW = getLaneWidth(scale);
-                spawnEffects(hitX, JUDGEMENT_LINE_Y, hitW);
-                return; 
+                // ★ここを修正：通常点(+100万分配) に加えて ボーナス(+1点)
+                score += scorePerNote + 1.0f;
+                
+                spawnEffects(getLaneCenterX(lane, getScale(0)), JUDGEMENT_LINE_Y, getLaneWidth(getScale(0)), Color.CYAN);
+            } 
+            // ② 通常 PERFECT (±50ms)
+            else if (absDiff <= WINDOW_PERFECT) {
+                message = "PERFECT";
+                messageColor = Color.YELLOW; 
+                timingMessage = fastLateInfo; 
+                score += scorePerNote * 1.0f; 
+                spawnEffects(getLaneCenterX(lane, getScale(0)), JUDGEMENT_LINE_Y, getLaneWidth(getScale(0)), Color.YELLOW);
             }
+            // ③ GOOD (±100ms)
+            else {
+                message = "GOOD";
+                messageColor = Color.GREEN;
+                timingMessage = fastLateInfo; 
+                score += scorePerNote * 0.5f; 
+                spawnEffects(getLaneCenterX(lane, getScale(0)), JUDGEMENT_LINE_Y, getLaneWidth(getScale(0)), Color.GREEN);
+            }
+
+            messageTimer = 0.5f; 
+            combo++; 
+            if (hitSound != null) hitSound.play();
+            return; 
         }
     }
 
