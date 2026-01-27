@@ -20,6 +20,7 @@ import java.util.Iterator;
 
 public class GameScreen extends ScreenAdapter {
     final Main game;
+    String songName; // ★追加：選択された曲名を保存する変数
     
     // ロジッククラス
     NoteManager noteManager;
@@ -42,8 +43,12 @@ public class GameScreen extends ScreenAdapter {
     final float CENTER_X = 1920 / 2f;
     final float SCROLL_SPEED_3D = 5.0f;
 
-    public GameScreen(Main game) {
+    public GameScreen(Main game, String songName) {
         this.game = game;
+        this.songName = songName; // 受け取った曲名を保存
+        
+        System.out.println("Selected Song: " + songName); // 確認用にログ出し
+
         shapeRenderer = new ShapeRenderer();
         noteImg = new Texture("libgdx.png");
         

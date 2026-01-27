@@ -31,7 +31,7 @@ public class TitleScreen extends ScreenAdapter {
 
         if (Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) {
             // ゲーム画面へ移動
-            game.setScreen(new GameScreen(game));
+            game.setScreen(new SongSelectScreen(game));
             dispose();
         }
     }
