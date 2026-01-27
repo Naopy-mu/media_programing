@@ -8,6 +8,7 @@ import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
+import com.badlogic.gdx.utils.ObjectMap;
 import com.badlogic.gdx.utils.ScreenUtils;
 import com.example.game.GameConfig;
 import com.example.game.Main;
@@ -16,23 +17,20 @@ import com.example.game.logic.EffectManager;
 import com.example.game.logic.JudgeSystem;
 import com.example.game.logic.NoteManager;
 
-import java.util.Iterator;
-
 public class GameScreen extends ScreenAdapter {
     final Main game;
-    String songName; // ★追加：選択された曲名を保存する変数
+    String songName; 
     
-    // ロジッククラス
     NoteManager noteManager;
     JudgeSystem judgeSystem;
     EffectManager effectManager;
 
-    // リソース
     ShapeRenderer shapeRenderer;
     Texture noteImg;
     Music music;
     Sound hitSound;
-    
+    Sound countSound; 
+
     float songPosition = 0;
 
     // 3D設定
@@ -43,76 +41,125 @@ public class GameScreen extends ScreenAdapter {
     final float CENTER_X = 1920 / 2f;
     final float SCROLL_SPEED_3D = 5.0f;
 
+    // カウントダウン用変数
+    boolean isPlaying = false; 
+    float countdownTimer = 0;  
+    int countIndex = 0;        
+    float bpm = 120;           
+    float beatDuration;        
+    float countInterval;       
+
+    // 曲ごとのBPM設定マップ
+    ObjectMap<String, Float> bpmMap = new ObjectMap<>();
+
     public GameScreen(Main game, String songName) {
         this.game = game;
-        this.songName = songName; // 受け取った曲名を保存
+        this.songName = songName;
         
-        System.out.println("Selected Song: " + songName); // 確認用にログ出し
+        bpmMap.put("Link Layer", 156f);
+        bpmMap.put("Pop!Stack!", 160f);
+        bpmMap.put("Timepiece Tower", 140f);
+        bpmMap.put("Eigenstate", 174f);
+
+        this.bpm = bpmMap.get(songName, 140f);
+        
+        // 1拍の時間
+        this.beatDuration = 60f / this.bpm;
+        // カウント間隔
+        this.countInterval = this.beatDuration; 
+
+        System.out.println("Now Playing: " + songName + " (BPM: " + bpm + ")");
 
         shapeRenderer = new ShapeRenderer();
         noteImg = new Texture("libgdx.png");
         
-        // ロジックの生成
-        noteManager = new NoteManager();
+        noteManager = new NoteManager(songName);
         judgeSystem = new JudgeSystem(noteManager.getTotalNotes());
         effectManager = new EffectManager();
 
-        // 音楽ロード
-        music = Gdx.audio.newMusic(Gdx.files.internal("Timepiece Tower.mp3"));
+        music = Gdx.audio.newMusic(Gdx.files.internal(songName + ".mp3"));
         music.setVolume(0.3f);
         music.setOnCompletionListener(m -> {
-            // 曲が終わったらリザルトへ
             game.setScreen(new ResultScreen(game, (int)judgeSystem.score, judgeSystem.getRank()));
             dispose();
         });
         
         try { hitSound = Gdx.audio.newSound(Gdx.files.internal("hit.mp3")); } catch (Exception e) {}
+        try { countSound = Gdx.audio.newSound(Gdx.files.internal("count.mp3")); } catch (Exception e) {}
 
-        music.play();
+        // ★修正：カウントダウン開始前に0.5秒の「溜め」を作る
+        // これにより、画面遷移直後の誤入力（hit音誤爆）を防ぎます
+        isPlaying = false;
+        countdownTimer = -0.5f; // マイナスからスタート
+        countIndex = 0;
     }
 
     @Override
     public void render(float delta) {
-        // --- 1. 更新処理 (Update) ---
-        songPosition = music.getPosition();
-        judgeSystem.update(delta);
-        effectManager.update(delta);
-        noteManager.checkMiss(songPosition, judgeSystem);
+        ScreenUtils.clear(0, 0, 0, 1);
 
-        // キー入力判定
-        for (int i = 0; i < GameConfig.LANE_COUNT; i++) {
-            if (Gdx.input.isKeyJustPressed(GameConfig.KEY_MAPPING[i])) {
-                processHit(i);
+        // --- 更新処理 ---
+        if (!isPlaying) {
+            // カウントダウン中の処理
+            updateCountdown(delta);
+        } else {
+            // ゲーム中の処理
+            songPosition = music.getPosition();
+            judgeSystem.update(delta);
+            effectManager.update(delta);
+            noteManager.checkMiss(songPosition, judgeSystem);
+
+            for (int i = 0; i < GameConfig.LANE_COUNT; i++) {
+                if (Gdx.input.isKeyJustPressed(GameConfig.KEY_MAPPING[i])) {
+                    processHit(i);
+                }
             }
         }
 
-        // --- 2. 描画処理 (Draw) ---
-        ScreenUtils.clear(0, 0, 0, 1);
-        
-        // (A) レーン描画
+        // --- 描画処理 ---
         drawLanes();
-
-        // (B) エフェクト描画
         drawEffects();
+        
+        if (isPlaying) {
+            drawNotes();
+        }
 
-        // (C) ノーツ描画
-        drawNotes();
-
-        // (D) UI描画
         drawUI();
+    }
+
+    // カウントダウンのロジック
+    void updateCountdown(float delta) {
+        countdownTimer += delta;
+
+        // ★修正：タイマーがマイナスの間（最初の0.5秒）は何もしない
+        if (countdownTimer < 0) return;
+
+        // 指定間隔ごとに音を鳴らす (0回目, 1回目, 2回目, 3回目)
+        if (countIndex < 4) {
+            if (countdownTimer >= countIndex * countInterval) {
+                if (countSound != null) countSound.play();
+                countIndex++;
+            }
+        } 
+        else {
+            // 4回鳴らし終わった後の待機処理
+            // 「4回カウント(4 * interval)」 + 「2拍待つ(2 * beatDuration)」経過したら開始
+            float startTime = (4 * countInterval) + (2 * beatDuration);
+            
+            if (countdownTimer >= startTime) {
+                music.play();
+                isPlaying = true;
+            }
+        }
     }
     
     void processHit(int lane) {
         for (Note note : noteManager.notes) {
             if (note.lane != lane || !note.active) continue;
-            
             Color resultColor = judgeSystem.checkHit(note.targetTime, songPosition);
             if (resultColor != null) {
-                // ヒット成功
                 note.active = false;
                 if (hitSound != null) hitSound.play();
-                
-                // エフェクト発生
                 float scale = getScale(0);
                 effectManager.spawn(getLaneCenterX(lane, scale), JUDGEMENT_LINE_Y, getLaneWidth(scale), resultColor);
                 return;
@@ -120,8 +167,7 @@ public class GameScreen extends ScreenAdapter {
         }
     }
 
-    // --- 描画ヘルパーメソッド ---
-
+    // --- 描画系（変更なし） ---
     void drawLanes() {
         Gdx.gl.glEnable(GL20.GL_BLEND);
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
@@ -200,7 +246,20 @@ public class GameScreen extends ScreenAdapter {
     void drawUI() {
         game.batch.begin();
         
-        // 判定メッセージ
+        if (!isPlaying) {
+            game.font.setColor(Color.YELLOW);
+            game.font.getData().setScale(3.0f);
+            
+            // 0秒未満（待機中）は何も出さないか、Loading...などを出しても良い
+            if (countdownTimer >= 0) {
+                if (countIndex < 4) {
+                    game.font.draw(game.batch, "READY...", CENTER_X - 100, 600);
+                } else {
+                    game.font.draw(game.batch, "GO!", CENTER_X - 50, 600);
+                }
+            }
+        }
+
         if (judgeSystem.messageTimer > 0) {
             game.font.setColor(judgeSystem.messageColor);
             game.font.getData().setScale(2.5f);
@@ -214,17 +273,16 @@ public class GameScreen extends ScreenAdapter {
             }
         }
 
-        // スコア表示
         game.font.setColor(Color.WHITE);
         game.font.getData().setScale(2.0f);
-        game.font.draw(game.batch, "Time: " + String.format("%.2f", songPosition), 20, 1050);
-        game.font.draw(game.batch, "Score: " + (int)judgeSystem.score, 20, 1010);
-        game.font.draw(game.batch, "Combo: " + judgeSystem.combo, 20, 970);
+        game.font.draw(game.batch, "Music: " + songName, 20, 1050);
+        game.font.draw(game.batch, "BPM: " + (int)bpm, 20, 1010); 
+        game.font.draw(game.batch, "Score: " + (int)judgeSystem.score, 20, 970);
+        game.font.draw(game.batch, "Combo: " + judgeSystem.combo, 20, 930);
         
         game.batch.end();
     }
 
-    // 3D計算ヘルパー
     float getScale(float zDistance) { return CAMERA_DEPTH / (CAMERA_DEPTH + zDistance); }
     float getScreenY(float scale) { return VANISHING_POINT_Y - (VANISHING_POINT_Y - JUDGEMENT_LINE_Y) * scale; }
     float getLaneWidth(float scale) { return NEAR_WIDTH_TOTAL * scale / 4.0f; }
@@ -241,5 +299,6 @@ public class GameScreen extends ScreenAdapter {
         noteImg.dispose();
         music.dispose();
         if (hitSound != null) hitSound.dispose();
+        if (countSound != null) countSound.dispose(); 
     }
 }

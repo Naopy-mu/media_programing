@@ -12,10 +12,12 @@ public class SongSelectScreen extends ScreenAdapter {
     final Main game;
     
     // 曲リスト（とりあえず仮の曲名を入れます）
+    // 曲リスト
     String[] songs = {
         "Timepiece Tower",
-        "Test Song 1",
-        "Test Song 2"
+        "Eigenstate",
+        "Link Layer",
+        "Pop!Stack!"
     };
     int selectedIndex = 0;
 

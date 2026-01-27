@@ -8,10 +8,12 @@ import java.util.Iterator;
 public class NoteManager {
     public Array<Note> notes;
     
-    public NoteManager() {
+    public NoteManager(String songName) {
         try {
-            notes = ChartLoader.loadChart("chart.csv");
+            // ★修正：曲名 + ".csv" を読み込む
+            notes = ChartLoader.loadChart(songName + ".csv");
         } catch (Exception e) {
+            e.printStackTrace(); // エラーがあればログに出す
             notes = new Array<>();
         }
     }
