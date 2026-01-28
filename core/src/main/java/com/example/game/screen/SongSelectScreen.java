@@ -11,8 +11,6 @@ import com.example.game.GameConfig;
 public class SongSelectScreen extends ScreenAdapter {
     final Main game;
     
-    // 曲リスト（とりあえず仮の曲名を入れます）
-    // 曲リスト
     String[] songs = {
         "Timepiece Tower",
         "Eigenstate",
@@ -31,53 +29,62 @@ public class SongSelectScreen extends ScreenAdapter {
 
         game.batch.begin();
         
-        // ヘッダー
         game.font.getData().setScale(3.0f);
         game.font.setColor(Color.CYAN);
         game.font.draw(game.batch, "SELECT MUSIC", GameConfig.SCREEN_WIDTH/2f - 200, 900);
 
-        // リスト表示
         for (int i = 0; i < songs.length; i++) {
-            float y = 600 - (i * 120); // 縦にずらして表示
+            float y = 600 - (i * 120); 
 
             if (i == selectedIndex) {
-                // 選択中の曲：大きく、黄色く、矢印付き
                 game.font.getData().setScale(2.5f);
                 game.font.setColor(Color.YELLOW);
                 game.font.draw(game.batch, "> " + songs[i] + " <", GameConfig.SCREEN_WIDTH/2f - 300, y);
             } else {
-                // その他の曲：小さく、グレー
                 game.font.getData().setScale(2.0f);
                 game.font.setColor(Color.GRAY);
                 game.font.draw(game.batch, songs[i], GameConfig.SCREEN_WIDTH/2f - 200, y);
             }
         }
         
-        // 操作ガイド
+        // ガイド表示
         game.font.getData().setScale(1.5f);
         game.font.setColor(Color.WHITE);
         game.font.draw(game.batch, "UP/DOWN: Select   SPACE: Start", GameConfig.SCREEN_WIDTH/2f - 250, 200);
+        
+        // ★追加：オプションへのガイドを表示
+        game.font.setColor(Color.GRAY);
+        game.font.draw(game.batch, "[O] OPTION / [ESC] BACK", 20, 50);
 
         game.batch.end();
 
-        // キー入力処理
         handleInput();
     }
 
     void handleInput() {
         if (Gdx.input.isKeyJustPressed(Input.Keys.UP)) {
             selectedIndex--;
-            if (selectedIndex < 0) selectedIndex = songs.length - 1; // 一番上なら一番下へ
+            if (selectedIndex < 0) selectedIndex = songs.length - 1; 
         }
         if (Gdx.input.isKeyJustPressed(Input.Keys.DOWN)) {
             selectedIndex++;
-            if (selectedIndex >= songs.length) selectedIndex = 0; // 一番下なら一番上へ
+            if (selectedIndex >= songs.length) selectedIndex = 0; 
         }
         
         if (Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) {
-            // 決定！ゲーム画面へ遷移
-            // ★ポイント：選択された曲名を渡す
             game.setScreen(new GameScreen(game, songs[selectedIndex])); 
+            dispose();
+        }
+
+        // ★追加：Oキーでオプション画面へ
+        if (Gdx.input.isKeyJustPressed(Input.Keys.O)) {
+            game.setScreen(new OptionScreen(game)); 
+            dispose();
+        }
+
+        // ★おまけ：ESCキーでタイトルに戻る（あると便利です）
+        if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
+            game.setScreen(new TitleScreen(game));
             dispose();
         }
     }
