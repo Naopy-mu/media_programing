@@ -36,7 +36,7 @@ public class GameScreen extends ScreenAdapter {
 
     // 3D設定
     final float VANISHING_POINT_Y = 1000;
-    final float JUDGEMENT_LINE_Y = 50;
+    final float JUDGEMENT_LINE_Y = 150;
     final float CAMERA_DEPTH = 1.0f;
     final float NEAR_WIDTH_TOTAL = 1500;
     final float CENTER_X = 1920 / 2f;
@@ -77,7 +77,7 @@ public class GameScreen extends ScreenAdapter {
         this.countInterval = this.beatDuration; 
 
         shapeRenderer = new ShapeRenderer();
-        noteImg = new Texture("libgdx.png");
+        noteImg = new Texture("notes-UI.png");
         
         noteManager = new NoteManager(songName);
         judgeSystem = new JudgeSystem(noteManager.getTotalNotes());
@@ -207,10 +207,12 @@ public class GameScreen extends ScreenAdapter {
                     resumeGame();
                     break;
                 case 1: // RESTART
-                    restartGame(); // 安全版メソッドを呼ぶ
+                    restartGame(); 
                     break;
                 case 2: // QUIT
-                    music.stop();
+                    // ★修正：ここで music.stop() を書かない！
+                    // dispose() の中で安全に止めるので、ここでは削除します。
+                    
                     game.setScreen(new SongSelectScreen(game));
                     dispose();
                     break;
@@ -290,35 +292,70 @@ public class GameScreen extends ScreenAdapter {
     void drawLanes() {
         Gdx.gl.glEnable(GL20.GL_BLEND);
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+        
+        // --- 1. レーンの背景 ---
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+        
+        // ★調整：レーンの見た目上の「底」の高さ
+        // 0 だと画面ピッタリ。20 くらいにすると「少し浮いている」感じになります。
+        float laneDrawBottomY = 50f;
+
+        // その高さに対応する「倍率（scale）」を逆算します
+        // これにより、パースが狂わずに手前まで描画できます
+        float scaleStart = (VANISHING_POINT_Y - laneDrawBottomY) / (VANISHING_POINT_Y - JUDGEMENT_LINE_Y);
+
         for (int i = 0; i < GameConfig.LANE_COUNT; i++) {
             if (Gdx.input.isKeyPressed(GameConfig.KEY_MAPPING[i])) shapeRenderer.setColor(1, 1, 0, 0.3f);
             else shapeRenderer.setColor(0.2f, 0.2f, 0.2f, 0.5f);
 
-            float scaleNear = getScale(0);
-            float x1 = getLaneCenterX(i, scaleNear) - getLaneWidth(scaleNear)/2;
-            float x2 = getLaneCenterX(i, scaleNear) + getLaneWidth(scaleNear)/2;
-            float y1 = getScreenY(scaleNear);
+            // 手前（laneDrawBottomY）の座標
+            float x1 = getLaneCenterX(i, scaleStart) - getLaneWidth(scaleStart)/2;
+            float x2 = getLaneCenterX(i, scaleStart) + getLaneWidth(scaleStart)/2;
+            
+            // 奥（消失点）の座標
             float scaleFar = getScale(10.0f);
             float x3 = getLaneCenterX(i, scaleFar) + getLaneWidth(scaleFar)/2;
             float x4 = getLaneCenterX(i, scaleFar) - getLaneWidth(scaleFar)/2;
             float y2 = getScreenY(scaleFar);
-            shapeRenderer.triangle(x1, 0, x2, 0, x3, y2);
-            shapeRenderer.triangle(x1, 0, x3, y2, x4, y2);
+            
+            // 三角形を描画（手前から奥へ）
+            // Y座標は laneDrawBottomY (例:20) から始まります
+            shapeRenderer.triangle(x1, laneDrawBottomY, x2, laneDrawBottomY, x3, y2);
+            shapeRenderer.triangle(x1, laneDrawBottomY, x3, y2, x4, y2);
         }
         shapeRenderer.end();
         
+        // --- 2. 判定ライン（光るバー） ---
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+        shapeRenderer.setColor(Color.CYAN); 
+        
+        float lineHeight = 4.0f; // 線の太さ
+        float lineY = JUDGEMENT_LINE_Y - lineHeight/2; // 判定ライン(Y=50)を中心に
+
+        // 左端〜右端を取得（判定ライン上の幅）
+        float scaleJust = getScale(0); // z=0 (ジャストタイミングの場所)
+        float leftX = getLaneCenterX(0, scaleJust) - getLaneWidth(scaleJust)/2;
+        float rightX = getLaneCenterX(GameConfig.LANE_COUNT-1, scaleJust) + getLaneWidth(scaleJust)/2;
+        
+        shapeRenderer.rect(leftX, lineY, rightX - leftX, lineHeight);
+        shapeRenderer.end();
+
+        // --- 3. レーン区切り線 ---
         shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
         shapeRenderer.setColor(Color.GRAY);
-        shapeRenderer.line(0, JUDGEMENT_LINE_Y, GameConfig.SCREEN_WIDTH, JUDGEMENT_LINE_Y); 
+        
         for (int i = 0; i <= GameConfig.LANE_COUNT; i++) {
-            float scaleNear = getScale(0);
+            // 手前（laneDrawBottomY の位置）
+            float xNear = (CENTER_X - (NEAR_WIDTH_TOTAL * scaleStart)/2) + ((NEAR_WIDTH_TOTAL * scaleStart)/4)*i;
+            
+            // 奥
             float scaleFar = getScale(10.0f); 
-            float xNear = (CENTER_X - NEAR_WIDTH_TOTAL/2) + (NEAR_WIDTH_TOTAL/4)*i;
             float totalWFar = NEAR_WIDTH_TOTAL * scaleFar;
             float xFar = (CENTER_X - totalWFar/2) + (totalWFar/4)*i;
             float yFar = getScreenY(scaleFar);
-            shapeRenderer.line(xNear, 0, xFar, yFar);
+            
+            // 線を引く（手前から奥へ）
+            shapeRenderer.line(xNear, laneDrawBottomY, xFar, yFar);
         }
         shapeRenderer.end();
         Gdx.gl.glDisable(GL20.GL_BLEND);
@@ -354,10 +391,24 @@ public class GameScreen extends ScreenAdapter {
 
                 float scale = getScale(zDistance);
                 float drawY = getScreenY(scale);
-                float drawW = getLaneWidth(scale);
+                
+                // ★修正：レーンの本来の幅を取得
+                float laneWidth = getLaneWidth(scale);
+
+                // ★調整ポイント：描画する幅の倍率
+                // 1.0f = レーン幅ぴったり
+                // 0.9f = 少し隙間を空ける（隣とくっつかないようにする）
+                // 1.1f = 画像に透明な余白がある場合、少し大きめに描画して合わせる
+                float widthScale = 1.0f; 
+
+                float drawW = laneWidth * widthScale;
                 float drawX = getLaneCenterX(note.lane, scale);
-                float drawH = 64f * scale;
-                game.batch.draw(noteImg, drawX - drawW/2 + 2, drawY, drawW - 4, drawH);
+                
+                // 高さを少し太く調整（お好みで変えてください）
+                float drawH = 50f * scale; 
+
+                // ★修正：+2 や -4 などの固定値を削除し、純粋に中心に合わせて描画
+                game.batch.draw(noteImg, drawX - drawW/2, drawY, drawW, drawH);
             }
         }
         game.batch.end();
@@ -414,29 +465,28 @@ public class GameScreen extends ScreenAdapter {
 
     @Override
     public void dispose() {
-        // 1. 先にグラフィック系（画像や描画ツール）を破棄する
-        // これにより、オーディオ処理が落ち着くためのわずかな時間を稼ぎます
+        // 1. 画像などの破棄
         try {
             if (shapeRenderer != null) shapeRenderer.dispose();
             if (noteImg != null) noteImg.dispose();
-        } catch (Exception e) {
-            // エラーが出ても無視
-        }
+        } catch (Exception e) { }
 
-        // 2. 効果音を破棄する
+        // 2. 効果音の破棄
         try {
             if (hitSound != null) hitSound.dispose();
             if (countSound != null) countSound.dispose();
         } catch (Exception e) { }
 
-        // 3. 最後に音楽を破棄する（一番デリケートなので最後）
+        // 3. 音楽の破棄（一番重要）
         try {
             if (music != null) {
                 music.setOnCompletionListener(null);
-                if (music.isPlaying()) {
-                    music.stop();
-                }
+                
+                // ★修正：再生中(isPlaying)じゃなくても、強制的にstopを呼んでバッファを解放させる
+                music.stop(); 
+                
                 music.dispose();
+                music = null; // 変数を空にしておく
             }
         } catch (Exception e) { }
     }
