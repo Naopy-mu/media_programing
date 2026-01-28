@@ -1,6 +1,7 @@
 package com.example.game.screen;
 
 import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.Input;
 import com.badlogic.gdx.ScreenAdapter;
 import com.badlogic.gdx.audio.Music;
 import com.badlogic.gdx.audio.Sound;
@@ -40,9 +41,7 @@ public class GameScreen extends ScreenAdapter {
     final float NEAR_WIDTH_TOTAL = 1500;
     final float CENTER_X = 1920 / 2f;
     
-    // ★変更：定数(final)ではなく、変数にする
     float scrollSpeed; 
-    // ★追加：判定調整用の変数
     float userOffset;
 
     // カウントダウン用
@@ -55,15 +54,17 @@ public class GameScreen extends ScreenAdapter {
 
     ObjectMap<String, Float> bpmMap = new ObjectMap<>();
 
+    // ポーズ機能用の変数
+    boolean isPaused = false;
+    String[] pauseItems = {"RESUME", "RESTART", "QUIT"};
+    int pauseIndex = 0;
+
     public GameScreen(Main game, String songName) {
         this.game = game;
         this.songName = songName;
         
-        // ★追加：GameConfigから保存された設定を読み込む！
         this.scrollSpeed = GameConfig.getScrollSpeed();
         this.userOffset = GameConfig.getOffset();
-
-        System.out.println("Settings Loaded - Speed: " + scrollSpeed + ", Offset: " + userOffset);
 
         bpmMap.put("Link Layer", 156f);
         bpmMap.put("Pop!Stack!", 160f);
@@ -101,34 +102,158 @@ public class GameScreen extends ScreenAdapter {
     public void render(float delta) {
         ScreenUtils.clear(0, 0, 0, 1);
 
-        if (!isPlaying) {
-            updateCountdown(delta);
+        // ポーズ中かどうかで処理を分岐
+        if (isPaused) {
+            handlePauseInput();
         } else {
-            songPosition = music.getPosition();
-            judgeSystem.update(delta);
-            effectManager.update(delta);
-            
-            // MISS判定にもオフセットを考慮（簡易的に）
-            // ノーツの実質時間は (targetTime + offset) なので、それを過ぎたらMISS
-            noteManager.checkMiss(songPosition - userOffset, judgeSystem);
+            // ゲーム進行
+            if (!isPlaying) {
+                updateCountdown(delta);
+            } else {
+                songPosition = music.getPosition();
+                judgeSystem.update(delta);
+                effectManager.update(delta);
+                noteManager.checkMiss(songPosition - userOffset, judgeSystem);
 
-            for (int i = 0; i < GameConfig.LANE_COUNT; i++) {
-                if (Gdx.input.isKeyJustPressed(GameConfig.KEY_MAPPING[i])) {
-                    processHit(i);
+                for (int i = 0; i < GameConfig.LANE_COUNT; i++) {
+                    if (Gdx.input.isKeyJustPressed(GameConfig.KEY_MAPPING[i])) {
+                        processHit(i);
+                    }
                 }
+            }
+            
+            // ポーズボタン（ESC）の監視
+            if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
+                pauseGame();
             }
         }
 
+        // --- 描画処理 ---
         drawLanes();
         drawEffects();
-        
-        if (isPlaying) {
+        if (isPlaying || isPaused) { 
             drawNotes();
         }
-
         drawUI();
+
+        if (isPaused) {
+            drawPauseMenu();
+        }
     }
 
+    // ポーズ開始処理
+    void pauseGame() {
+        isPaused = true;
+        if (music.isPlaying()) {
+            music.pause(); 
+        }
+        pauseIndex = 0; 
+    }
+
+    // ポーズ解除（再開）処理
+    void resumeGame() {
+        isPaused = false;
+        if (isPlaying) {
+            music.play();
+        }
+    }
+
+    // ★修正：安全なリスタート処理
+    void restartGame() {
+        // 1. リスナーを一旦解除（停止操作中の誤動作防止）
+        music.setOnCompletionListener(null);
+
+        // 2. 音楽を止める
+        // ※ここで setPosition(0) を呼ぶとWindowsでクラッシュするため、stop()だけにする
+        if (music.isPlaying()) {
+            music.stop(); 
+        } else {
+            music.stop(); // 停止中でも念のため呼んで内部位置をリセットさせる
+        }
+
+        // 3. リスナーを再登録
+        music.setOnCompletionListener(m -> {
+            game.setScreen(new ResultScreen(game, (int)judgeSystem.score, judgeSystem.getRank()));
+            dispose();
+        });
+        
+        // 4. 進行状況のリセット
+        isPaused = false;
+        isPlaying = false;
+        countdownTimer = -0.5f; 
+        countIndex = 0;
+        songPosition = 0;
+        
+        // 5. ゲームロジックの再生成
+        noteManager = new NoteManager(songName);
+        judgeSystem = new JudgeSystem(noteManager.getTotalNotes());
+        effectManager = new EffectManager();
+    }
+
+    // ポーズメニューの入力処理
+    void handlePauseInput() {
+        if (Gdx.input.isKeyJustPressed(Input.Keys.UP)) {
+            pauseIndex--;
+            if (pauseIndex < 0) pauseIndex = pauseItems.length - 1;
+        }
+        if (Gdx.input.isKeyJustPressed(Input.Keys.DOWN)) {
+            pauseIndex++;
+            if (pauseIndex >= pauseItems.length) pauseIndex = 0;
+        }
+
+        if (Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) {
+            switch (pauseIndex) {
+                case 0: // RESUME
+                    resumeGame();
+                    break;
+                case 1: // RESTART
+                    restartGame(); // 安全版メソッドを呼ぶ
+                    break;
+                case 2: // QUIT
+                    music.stop();
+                    game.setScreen(new SongSelectScreen(game));
+                    dispose();
+                    break;
+            }
+        }
+        
+        if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
+            resumeGame();
+        }
+    }
+
+    // ポーズメニューの描画
+    void drawPauseMenu() {
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+        shapeRenderer.setColor(0, 0, 0, 0.7f); 
+        shapeRenderer.rect(0, 0, GameConfig.SCREEN_WIDTH, GameConfig.SCREEN_HEIGHT);
+        shapeRenderer.end();
+        Gdx.gl.glDisable(GL20.GL_BLEND);
+
+        game.batch.begin();
+        
+        game.font.setColor(Color.CYAN);
+        game.font.getData().setScale(4.0f);
+        game.font.draw(game.batch, "PAUSED", CENTER_X - 150, 800);
+
+        for (int i = 0; i < pauseItems.length; i++) {
+            float y = 600 - (i * 120);
+            if (i == pauseIndex) {
+                game.font.setColor(Color.YELLOW);
+                game.font.getData().setScale(2.5f);
+                game.font.draw(game.batch, "> " + pauseItems[i] + " <", CENTER_X - 150, y);
+            } else {
+                game.font.setColor(Color.GRAY);
+                game.font.getData().setScale(2.0f);
+                game.font.draw(game.batch, pauseItems[i], CENTER_X - 100, y);
+            }
+        }
+        game.batch.end();
+    }
+
+    // --- 以下、描画ヘルパー ---
     void updateCountdown(float delta) {
         countdownTimer += delta;
         if (countdownTimer < 0) return;
@@ -151,11 +276,7 @@ public class GameScreen extends ScreenAdapter {
     void processHit(int lane) {
         for (Note note : noteManager.notes) {
             if (note.lane != lane || !note.active) continue;
-            
-            // ★重要：判定時、ノーツのターゲット時間にオフセットを足して計算する
-            // オフセットが +0.1 (遅らせる) なら、ノーツの到達時刻も 0.1 遅くなる
             Color resultColor = judgeSystem.checkHit(note.targetTime + userOffset, songPosition);
-            
             if (resultColor != null) {
                 note.active = false;
                 if (hitSound != null) hitSound.play();
@@ -226,11 +347,7 @@ public class GameScreen extends ScreenAdapter {
         game.batch.begin();
         for (Note note : noteManager.notes) {
             if (note.active) {
-                // ★重要：描画計算にもオフセットを加える
-                // (targetTime + offset) - songPosition
                 float timeRemains = (note.targetTime + userOffset) - songPosition;
-                
-                // ★重要：scrollSpeed変数を使う
                 float zDistance = timeRemains * scrollSpeed;
                 
                 if (zDistance < -0.2f || zDistance > 10.0f) continue;
@@ -249,7 +366,7 @@ public class GameScreen extends ScreenAdapter {
     void drawUI() {
         game.batch.begin();
         
-        if (!isPlaying) {
+        if (!isPlaying && !isPaused) { 
             game.font.setColor(Color.YELLOW);
             game.font.getData().setScale(3.0f);
             if (countdownTimer >= 0) {
@@ -277,7 +394,6 @@ public class GameScreen extends ScreenAdapter {
         game.font.getData().setScale(2.0f);
         game.font.draw(game.batch, "Music: " + songName, 20, 1050);
         game.font.draw(game.batch, "BPM: " + (int)bpm, 20, 1010); 
-        // 速度設定も表示しておくと親切
         game.font.draw(game.batch, "Speed: " + String.format("%.1f", scrollSpeed), 20, 970);
         
         game.font.draw(game.batch, "Score: " + (int)judgeSystem.score, 20, 930);
@@ -298,10 +414,30 @@ public class GameScreen extends ScreenAdapter {
 
     @Override
     public void dispose() {
-        shapeRenderer.dispose();
-        noteImg.dispose();
-        music.dispose();
-        if (hitSound != null) hitSound.dispose();
-        if (countSound != null) countSound.dispose(); 
+        // 1. 先にグラフィック系（画像や描画ツール）を破棄する
+        // これにより、オーディオ処理が落ち着くためのわずかな時間を稼ぎます
+        try {
+            if (shapeRenderer != null) shapeRenderer.dispose();
+            if (noteImg != null) noteImg.dispose();
+        } catch (Exception e) {
+            // エラーが出ても無視
+        }
+
+        // 2. 効果音を破棄する
+        try {
+            if (hitSound != null) hitSound.dispose();
+            if (countSound != null) countSound.dispose();
+        } catch (Exception e) { }
+
+        // 3. 最後に音楽を破棄する（一番デリケートなので最後）
+        try {
+            if (music != null) {
+                music.setOnCompletionListener(null);
+                if (music.isPlaying()) {
+                    music.stop();
+                }
+                music.dispose();
+            }
+        } catch (Exception e) { }
     }
 }
