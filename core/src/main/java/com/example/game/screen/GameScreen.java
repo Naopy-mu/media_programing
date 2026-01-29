@@ -60,9 +60,20 @@ public class GameScreen extends ScreenAdapter {
     String[] pauseItems = {"RESUME", "RESTART", "QUIT"};
     int pauseIndex = 0;
 
+    // ★追加：フェードイン演出用の変数
+    private ShapeRenderer fadeRenderer; // 白い幕を描画する道具
+    private float fadeInAlpha = 1.0f;   // 白さ（1.0=真っ白 ～ 0.0=透明）
+    private boolean isFadingIn = true;  // フェードイン中かどうかのフラグ
+    final float FADE_SPEED = 0.8f;      // 霧が晴れる速さ（数字が大きいほど速い）
+
     public GameScreen(Main game, String songName) {
         this.game = game;
         this.songName = songName;
+
+        // フェードイン用の道具を準備
+        fadeRenderer = new ShapeRenderer();
+        fadeInAlpha = 1.0f; // 最初は真っ白からスタート
+        isFadingIn = true;
         
         this.scrollSpeed = GameConfig.getScrollSpeed();
         this.userOffset = GameConfig.getOffset();
@@ -139,6 +150,31 @@ public class GameScreen extends ScreenAdapter {
 
         if (isPaused) {
             drawPauseMenu();
+        }
+
+        if (isFadingIn) {
+            // 時間経過で白さを減らす
+            fadeInAlpha -= delta * FADE_SPEED;
+
+            // 完全に透明になったら終了
+            if (fadeInAlpha <= 0f) {
+                fadeInAlpha = 0f;
+                isFadingIn = false;
+            }
+
+            // 半透明描画を有効にする
+            Gdx.gl.glEnable(GL20.GL_BLEND);
+            Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+
+            fadeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+            // 色を指定（R=1, G=1, B=1 が白。Alphaが透明度）
+            fadeRenderer.setColor(1f, 1f, 1f, fadeInAlpha);
+            // 画面いっぱいに四角を描く
+            fadeRenderer.rect(0, 0, GameConfig.SCREEN_WIDTH, GameConfig.SCREEN_HEIGHT);
+            fadeRenderer.end();
+
+            // 半透明設定を戻す
+            Gdx.gl.glDisable(GL20.GL_BLEND);
         }
     }
 
@@ -531,5 +567,10 @@ public class GameScreen extends ScreenAdapter {
                 music = null; // 変数を空にしておく
             }
         } catch (Exception e) { }
+        
+        // ★追加：使った道具を片付ける
+        if (fadeRenderer != null) {
+            fadeRenderer.dispose();
+        }
     }
 }
