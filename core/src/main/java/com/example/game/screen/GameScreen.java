@@ -37,6 +37,7 @@ public class GameScreen extends ScreenAdapter {
     // 3D設定
     final float VANISHING_POINT_Y = 1000;
     final float JUDGEMENT_LINE_Y = 150;
+    final float LANE_BOTTOM_Y = 50f;
     final float CAMERA_DEPTH = 1.0f;
     final float NEAR_WIDTH_TOTAL = 1500;
     final float CENTER_X = 1920 / 2f;
@@ -298,7 +299,7 @@ public class GameScreen extends ScreenAdapter {
         
         // ★調整：レーンの見た目上の「底」の高さ
         // 0 だと画面ピッタリ。20 くらいにすると「少し浮いている」感じになります。
-        float laneDrawBottomY = 50f;
+        float laneDrawBottomY = LANE_BOTTOM_Y;
 
         // その高さに対応する「倍率（scale）」を逆算します
         // これにより、パースが狂わずに手前まで描画できます
@@ -382,8 +383,51 @@ public class GameScreen extends ScreenAdapter {
 
     void drawNotes() {
         game.batch.begin();
+        // 色がおかしくならないように白にリセット
+        game.batch.setColor(Color.WHITE);
+
         for (Note note : noteManager.notes) {
             if (note.active) {
+                // --- 1. まず計算に必要な数値を作る (ここが消えていたのが原因！) ---
+                float timeRemains = (note.targetTime + userOffset) - songPosition;
+                float zDistance = timeRemains * scrollSpeed;
+                
+                // 画面外ならスキップ
+                if (zDistance < -0.2f || zDistance > 10.0f) continue;
+
+                // ★ここで「scale」や「drawY」を定義します
+                float scale = getScale(zDistance);
+                float drawY = getScreenY(scale);
+                
+                // トリミングで薄くなった画像を補うため、高さを3倍(150f)に設定
+                float drawH = 40f * scale; 
+
+                // レーンの下に沈んだら描画しない（完全に沈んでから消す）
+                if (drawY + drawH < LANE_BOTTOM_Y) continue;
+
+                // --- 2. ここで赤くなっていた変数たちを定義 ---
+                // 上で「scale」を作ったので、ここではエラーが出なくなります
+                float laneWidth = getLaneWidth(scale);
+                float widthScale = 1.0f; 
+                float drawW = laneWidth * widthScale;
+                float drawX = getLaneCenterX(note.lane, scale);
+
+                // --- 3. 描画 ---
+                game.batch.draw(noteImg, drawX - drawW/2, drawY, drawW, drawH);
+            }
+        }
+        game.batch.end();
+    }
+    /*void drawNotes() {
+        // game.batch.begin(); // ← batchはいったん止める
+        
+        // ★ShapeRendererで白い四角を描いてみる（テスト用）
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+        shapeRenderer.setColor(Color.WHITE);
+
+        for (Note note : noteManager.notes) {
+             if (note.active) {
+                // 1. まず計算を行う（ここが重要！）
                 float timeRemains = (note.targetTime + userOffset) - songPosition;
                 float zDistance = timeRemains * scrollSpeed;
                 
@@ -391,28 +435,26 @@ public class GameScreen extends ScreenAdapter {
 
                 float scale = getScale(zDistance);
                 float drawY = getScreenY(scale);
-                
-                // ★修正：レーンの本来の幅を取得
+
+                // レーンの底より下なら描かない
+                if (drawY < LANE_BOTTOM_Y) continue;
+
+                // レーン幅を計算
                 float laneWidth = getLaneWidth(scale);
-
-                // ★調整ポイント：描画する幅の倍率
-                // 1.0f = レーン幅ぴったり
-                // 0.9f = 少し隙間を空ける（隣とくっつかないようにする）
-                // 1.1f = 画像に透明な余白がある場合、少し大きめに描画して合わせる
-                float widthScale = 1.0f; 
-
-                float drawW = laneWidth * widthScale;
-                float drawX = getLaneCenterX(note.lane, scale);
                 
-                // 高さを少し太く調整（お好みで変えてください）
+                // 2. 四角を描く
+                float drawW = laneWidth * 1.0f;
+                float drawX = getLaneCenterX(note.lane, scale);
                 float drawH = 50f * scale; 
 
-                // ★修正：+2 や -4 などの固定値を削除し、純粋に中心に合わせて描画
-                game.batch.draw(noteImg, drawX - drawW/2, drawY, drawW, drawH);
+                // 画像(batch)ではなく、図形(rect)を描く
+                shapeRenderer.rect(drawX - drawW/2, drawY, drawW, drawH);
             }
         }
-        game.batch.end();
-    }
+        shapeRenderer.end();
+
+        // game.batch.end(); // ← batch終了もコメントアウト
+    }*/
 
     void drawUI() {
         game.batch.begin();
