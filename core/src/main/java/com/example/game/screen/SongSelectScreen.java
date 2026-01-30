@@ -44,9 +44,8 @@ public class SongSelectScreen extends ScreenAdapter {
     final float BROWSING_CENTER_X = 500f;
     float currentAnimX;
 
-    // ★ホワイトアウト演出用の変数
+    // ホワイトアウト演出用の変数
     float fadeAlpha = 0f;       
-    boolean isFadingOut = false; // フェードアウト開始フラグ
 
     Music previewMusic;
     String currentPlayingSong = "";
@@ -71,11 +70,12 @@ public class SongSelectScreen extends ScreenAdapter {
         currentAnimX = BROWSING_CENTER_X;
 
         // =========================================================
-        // ★メモリ対策：「4枚に1枚」読み込む (i += 4)
+        // ★設定反映：画像を「全フレーム」読み込む (i += 1)
         // =========================================================
         
         // --- 1. ループ画像の読み込み ---
         loopTextures = new Array<>();
+        // 指定通り i += 1 に変更
         for (int i = 1; i <= TOTAL_LOOP_FRAMES; i += 1) { 
             String path = String.format(LOOP_PATH, i);
             try {
@@ -85,11 +85,13 @@ public class SongSelectScreen extends ScreenAdapter {
             } catch (Throwable e) { /* 無視 */ }
         }
         if (loopTextures.size > 0) {
+            // 指定通り 1/15秒 間隔
             loopAnimation = new Animation<>(1f / 15f, loopTextures, Animation.PlayMode.LOOP);
         }
 
         // --- 2. 突入画像の読み込み ---
         moveTextures = new Array<>();
+        // 指定通り i += 1 に変更
         for (int i = 1; i <= TOTAL_MOVE_FRAMES; i += 1) { 
             String path = String.format(MOVE_PATH, i);
             try {
@@ -99,7 +101,7 @@ public class SongSelectScreen extends ScreenAdapter {
             } catch (Throwable e) { /* 無視 */ }
         }
         if (moveTextures.size > 0) {
-            // 4枚飛ばし(約48枚) を 30fps で再生 = 約1.6秒でズーム完了
+            // 指定通り 1/60秒 間隔
             moveAnimation = new Animation<>(1f / 60f, moveTextures, Animation.PlayMode.NORMAL);
         }
 
@@ -120,7 +122,6 @@ public class SongSelectScreen extends ScreenAdapter {
 
     @Override
     public void render(float delta) {
-        // 解放済みなら真っ白にして待機（遷移直前）
         if (assetsDisposed) {
             Gdx.gl.glClearColor(1, 1, 1, 1);
             Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
@@ -131,13 +132,12 @@ public class SongSelectScreen extends ScreenAdapter {
         
         updateLogic(delta);
         
-        // 背景アニメ描画
         drawCircularAnimation();
 
-        // UI描画（フェードアウト中は徐々にUIも消すため、fadeAlphaの影響を受けさせる）
-        if (currentState != State.PLAYING_INTRO || fadeAlpha < 1.0f) {
+        // 突入アニメ中（PLAYING_INTRO）は UIを一切描画しない
+        if (currentState != State.PLAYING_INTRO) {
             game.batch.begin();
-            // 画面が白くなるにつれてUIも見えなくする
+            // フェードアウト中のみ描画
             if (uiAlpha > 0.01f) {
                 drawCirclesAndSpectrum(delta);
                 drawSongList(delta);
@@ -145,8 +145,7 @@ public class SongSelectScreen extends ScreenAdapter {
             game.batch.end();
         }
 
-        // ★段階的ホワイトアウト処理
-        // 画面全体を「徐々に濃くなる白」で覆う
+        // 段階的ホワイトアウト処理
         if (fadeAlpha > 0) {
             Gdx.gl.glEnable(GL20.GL_BLEND);
             Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
@@ -222,36 +221,35 @@ public class SongSelectScreen extends ScreenAdapter {
             case MOVING_CENTER:
                 float targetX = GameConfig.SCREEN_WIDTH / 2f;
                 currentAnimX = MathUtils.lerp(currentAnimX, targetX, 0.2f);
-                uiAlpha = MathUtils.lerp(uiAlpha, 0f, 0.1f);
+                // 中央移動中はUIをフェードアウト
+                uiAlpha = MathUtils.lerp(uiAlpha, 0f, 0.2f); 
+
                 if (Math.abs(currentAnimX - targetX) < 5.0f) {
-                    currentAnimX = targetX; currentState = State.PLAYING_INTRO; moveAnimTime = 0;
+                    currentAnimX = targetX; 
+                    currentState = State.PLAYING_INTRO;
+                    moveAnimTime = 0;
+                    uiAlpha = 0f; // UIを完全に消去
                 }
                 break;
             case PLAYING_INTRO:
                 moveAnimTime += delta;
                 
-                // アニメーションの進行に合わせて白くする
                 if (moveAnimation != null) {
                     float duration = moveAnimation.getAnimationDuration();
-                    // 終了の少し前から白くし始める（後半50%くらいから）
                     float progress = moveAnimTime / duration;
                     
-                    // progressが 0.5(50%)を超えたら白くし始める
+                    // アニメの後半から白くしていく
                     if (progress > 0.5f) {
-                        // 0.5～1.0 の間を 0.0～1.0 に変換
                         fadeAlpha = (progress - 0.5f) * 2.0f; 
                     } else {
                         fadeAlpha = 0f;
                     }
                     
-                    // 上限カット
                     if (fadeAlpha > 1.0f) fadeAlpha = 1.0f;
 
-                    // アニメ終了 ＝ 画面遷移
                     if (moveAnimation.isAnimationFinished(moveAnimTime)) {
-                        manualDisposeHeavyAssets(); // メモリ解放
+                        manualDisposeHeavyAssets();
                         assetsDisposed = true;
-                        
                         game.setScreen(new GameScreen(game, songs[selectedIndex]));
                         return;
                     }
@@ -308,7 +306,6 @@ public class SongSelectScreen extends ScreenAdapter {
         }
     }
 
-    // 重たい画像を先に手動で捨てるメソッド
     private void manualDisposeHeavyAssets() {
         System.out.println("Switching screens: Disposing heavy assets now...");
         if (loopTextures != null) {
