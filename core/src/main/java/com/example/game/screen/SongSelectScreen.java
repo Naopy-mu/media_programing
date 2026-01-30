@@ -76,7 +76,7 @@ public class SongSelectScreen extends ScreenAdapter {
         
         // --- 1. ループ画像の読み込み ---
         loopTextures = new Array<>();
-        for (int i = 1; i <= TOTAL_LOOP_FRAMES; i += 4) { 
+        for (int i = 1; i <= TOTAL_LOOP_FRAMES; i += 1) { 
             String path = String.format(LOOP_PATH, i);
             try {
                 if (Gdx.files.internal(path).exists()) {
@@ -85,12 +85,12 @@ public class SongSelectScreen extends ScreenAdapter {
             } catch (Throwable e) { /* 無視 */ }
         }
         if (loopTextures.size > 0) {
-            loopAnimation = new Animation<>(0.1f, loopTextures, Animation.PlayMode.LOOP);
+            loopAnimation = new Animation<>(1f / 15f, loopTextures, Animation.PlayMode.LOOP);
         }
 
         // --- 2. 突入画像の読み込み ---
         moveTextures = new Array<>();
-        for (int i = 1; i <= TOTAL_MOVE_FRAMES; i += 4) { 
+        for (int i = 1; i <= TOTAL_MOVE_FRAMES; i += 1) { 
             String path = String.format(MOVE_PATH, i);
             try {
                 if (Gdx.files.internal(path).exists()) {
@@ -100,7 +100,7 @@ public class SongSelectScreen extends ScreenAdapter {
         }
         if (moveTextures.size > 0) {
             // 4枚飛ばし(約48枚) を 30fps で再生 = 約1.6秒でズーム完了
-            moveAnimation = new Animation<>(1f / 30f, moveTextures, Animation.PlayMode.NORMAL);
+            moveAnimation = new Animation<>(1f / 60f, moveTextures, Animation.PlayMode.NORMAL);
         }
 
         playPreview(songs[0]);

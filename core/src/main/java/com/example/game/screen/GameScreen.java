@@ -60,11 +60,14 @@ public class GameScreen extends ScreenAdapter {
     String[] pauseItems = {"RESUME", "RESTART", "QUIT"};
     int pauseIndex = 0;
 
-    // ★追加：フェードイン演出用の変数
+    // フェードイン演出用の変数
     private ShapeRenderer fadeRenderer; // 白い幕を描画する道具
     private float fadeInAlpha = 1.0f;   // 白さ（1.0=真っ白 ～ 0.0=透明）
     private boolean isFadingIn = true;  // フェードイン中かどうかのフラグ
-    final float FADE_SPEED = 0.8f;      // 霧が晴れる速さ（数字が大きいほど速い）
+    final float FADE_SPEED = 0.8f;      // 霧が晴れる速さ
+
+    // 二重にQUIT処理が走らないようにするためのフラグ
+    private boolean isQuitting = false;
 
     public GameScreen(Main game, String songName) {
         this.game = game;
@@ -108,6 +111,7 @@ public class GameScreen extends ScreenAdapter {
         isPlaying = false;
         countdownTimer = -0.5f;
         countIndex = 0;
+        isQuitting = false; // フラグリセット
     }
 
     @Override
@@ -143,15 +147,17 @@ public class GameScreen extends ScreenAdapter {
         // --- 描画処理 ---
         drawLanes();
         drawEffects();
-        if (isPlaying || isPaused) { 
-            drawNotes();
-        }
+        
+        // ポーズ中でもノーツは表示したままにする（停止しているように見せる）
+        drawNotes(); 
+        
         drawUI();
 
         if (isPaused) {
             drawPauseMenu();
         }
 
+        // --- フェードイン（ホワイトイン）演出 ---
         if (isFadingIn) {
             // 時間経過で白さを減らす
             fadeInAlpha -= delta * FADE_SPEED;
@@ -195,13 +201,12 @@ public class GameScreen extends ScreenAdapter {
         }
     }
 
-    // ★修正：安全なリスタート処理
+    // 安全なリスタート処理
     void restartGame() {
         // 1. リスナーを一旦解除（停止操作中の誤動作防止）
         music.setOnCompletionListener(null);
 
         // 2. 音楽を止める
-        // ※ここで setPosition(0) を呼ぶとWindowsでクラッシュするため、stop()だけにする
         if (music.isPlaying()) {
             music.stop(); 
         } else {
@@ -220,11 +225,33 @@ public class GameScreen extends ScreenAdapter {
         countdownTimer = -0.5f; 
         countIndex = 0;
         songPosition = 0;
+        isQuitting = false;
         
         // 5. ゲームロジックの再生成
         noteManager = new NoteManager(songName);
         judgeSystem = new JudgeSystem(noteManager.getTotalNotes());
         effectManager = new EffectManager();
+    }
+
+    // ★重要：メモリを解放してから選曲画面に戻るメソッド
+    private void returnToSongSelect() {
+        if (isQuitting) return; // 連打防止
+        isQuitting = true;
+
+        // 現在のフレームの描画が終わってから実行する
+        Gdx.app.postRunnable(new Runnable() {
+            @Override
+            public void run() {
+                // 1. 先に今の画面のメモリを「手動で」完全に消す
+                dispose(); 
+
+                // 2. システムにメモリ掃除を依頼する（JavaのGC）
+                System.gc();
+
+                // 3. メモリが空いた状態で、選曲画面を新しく作る
+                game.setScreen(new SongSelectScreen(game));
+            }
+        });
     }
 
     // ポーズメニューの入力処理
@@ -238,7 +265,7 @@ public class GameScreen extends ScreenAdapter {
             if (pauseIndex >= pauseItems.length) pauseIndex = 0;
         }
 
-        if (Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) {
+        if (Gdx.input.isKeyJustPressed(Input.Keys.SPACE) || Gdx.input.isKeyJustPressed(Input.Keys.ENTER)) {
             switch (pauseIndex) {
                 case 0: // RESUME
                     resumeGame();
@@ -247,11 +274,8 @@ public class GameScreen extends ScreenAdapter {
                     restartGame(); 
                     break;
                 case 2: // QUIT
-                    // ★修正：ここで music.stop() を書かない！
-                    // dispose() の中で安全に止めるので、ここでは削除します。
-                    
-                    game.setScreen(new SongSelectScreen(game));
-                    dispose();
+                    // ★修正：安全な終了メソッドを呼ぶ
+                    returnToSongSelect();
                     break;
             }
         }
@@ -333,44 +357,34 @@ public class GameScreen extends ScreenAdapter {
         // --- 1. レーンの背景 ---
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
         
-        // ★調整：レーンの見た目上の「底」の高さ
-        // 0 だと画面ピッタリ。20 くらいにすると「少し浮いている」感じになります。
         float laneDrawBottomY = LANE_BOTTOM_Y;
-
-        // その高さに対応する「倍率（scale）」を逆算します
-        // これにより、パースが狂わずに手前まで描画できます
         float scaleStart = (VANISHING_POINT_Y - laneDrawBottomY) / (VANISHING_POINT_Y - JUDGEMENT_LINE_Y);
 
         for (int i = 0; i < GameConfig.LANE_COUNT; i++) {
             if (Gdx.input.isKeyPressed(GameConfig.KEY_MAPPING[i])) shapeRenderer.setColor(1, 1, 0, 0.3f);
             else shapeRenderer.setColor(0.2f, 0.2f, 0.2f, 0.5f);
 
-            // 手前（laneDrawBottomY）の座標
             float x1 = getLaneCenterX(i, scaleStart) - getLaneWidth(scaleStart)/2;
             float x2 = getLaneCenterX(i, scaleStart) + getLaneWidth(scaleStart)/2;
             
-            // 奥（消失点）の座標
             float scaleFar = getScale(10.0f);
             float x3 = getLaneCenterX(i, scaleFar) + getLaneWidth(scaleFar)/2;
             float x4 = getLaneCenterX(i, scaleFar) - getLaneWidth(scaleFar)/2;
             float y2 = getScreenY(scaleFar);
             
-            // 三角形を描画（手前から奥へ）
-            // Y座標は laneDrawBottomY (例:20) から始まります
             shapeRenderer.triangle(x1, laneDrawBottomY, x2, laneDrawBottomY, x3, y2);
             shapeRenderer.triangle(x1, laneDrawBottomY, x3, y2, x4, y2);
         }
         shapeRenderer.end();
         
-        // --- 2. 判定ライン（光るバー） ---
+        // --- 2. 判定ライン ---
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
         shapeRenderer.setColor(Color.CYAN); 
         
-        float lineHeight = 4.0f; // 線の太さ
-        float lineY = JUDGEMENT_LINE_Y - lineHeight/2; // 判定ライン(Y=50)を中心に
+        float lineHeight = 4.0f;
+        float lineY = JUDGEMENT_LINE_Y - lineHeight/2;
 
-        // 左端〜右端を取得（判定ライン上の幅）
-        float scaleJust = getScale(0); // z=0 (ジャストタイミングの場所)
+        float scaleJust = getScale(0); 
         float leftX = getLaneCenterX(0, scaleJust) - getLaneWidth(scaleJust)/2;
         float rightX = getLaneCenterX(GameConfig.LANE_COUNT-1, scaleJust) + getLaneWidth(scaleJust)/2;
         
@@ -382,16 +396,12 @@ public class GameScreen extends ScreenAdapter {
         shapeRenderer.setColor(Color.GRAY);
         
         for (int i = 0; i <= GameConfig.LANE_COUNT; i++) {
-            // 手前（laneDrawBottomY の位置）
             float xNear = (CENTER_X - (NEAR_WIDTH_TOTAL * scaleStart)/2) + ((NEAR_WIDTH_TOTAL * scaleStart)/4)*i;
-            
-            // 奥
             float scaleFar = getScale(10.0f); 
             float totalWFar = NEAR_WIDTH_TOTAL * scaleFar;
             float xFar = (CENTER_X - totalWFar/2) + (totalWFar/4)*i;
             float yFar = getScreenY(scaleFar);
             
-            // 線を引く（手前から奥へ）
             shapeRenderer.line(xNear, laneDrawBottomY, xFar, yFar);
         }
         shapeRenderer.end();
@@ -419,78 +429,31 @@ public class GameScreen extends ScreenAdapter {
 
     void drawNotes() {
         game.batch.begin();
-        // 色がおかしくならないように白にリセット
         game.batch.setColor(Color.WHITE);
 
         for (Note note : noteManager.notes) {
             if (note.active) {
-                // --- 1. まず計算に必要な数値を作る (ここが消えていたのが原因！) ---
                 float timeRemains = (note.targetTime + userOffset) - songPosition;
                 float zDistance = timeRemains * scrollSpeed;
                 
-                // 画面外ならスキップ
                 if (zDistance < -0.2f || zDistance > 10.0f) continue;
 
-                // ★ここで「scale」や「drawY」を定義します
                 float scale = getScale(zDistance);
                 float drawY = getScreenY(scale);
-                
-                // トリミングで薄くなった画像を補うため、高さを3倍(150f)に設定
                 float drawH = 40f * scale; 
 
-                // レーンの下に沈んだら描画しない（完全に沈んでから消す）
                 if (drawY + drawH < LANE_BOTTOM_Y) continue;
 
-                // --- 2. ここで赤くなっていた変数たちを定義 ---
-                // 上で「scale」を作ったので、ここではエラーが出なくなります
                 float laneWidth = getLaneWidth(scale);
                 float widthScale = 1.0f; 
                 float drawW = laneWidth * widthScale;
                 float drawX = getLaneCenterX(note.lane, scale);
 
-                // --- 3. 描画 ---
                 game.batch.draw(noteImg, drawX - drawW/2, drawY, drawW, drawH);
             }
         }
         game.batch.end();
     }
-    /*void drawNotes() {
-        // game.batch.begin(); // ← batchはいったん止める
-        
-        // ★ShapeRendererで白い四角を描いてみる（テスト用）
-        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
-        shapeRenderer.setColor(Color.WHITE);
-
-        for (Note note : noteManager.notes) {
-             if (note.active) {
-                // 1. まず計算を行う（ここが重要！）
-                float timeRemains = (note.targetTime + userOffset) - songPosition;
-                float zDistance = timeRemains * scrollSpeed;
-                
-                if (zDistance < -0.2f || zDistance > 10.0f) continue;
-
-                float scale = getScale(zDistance);
-                float drawY = getScreenY(scale);
-
-                // レーンの底より下なら描かない
-                if (drawY < LANE_BOTTOM_Y) continue;
-
-                // レーン幅を計算
-                float laneWidth = getLaneWidth(scale);
-                
-                // 2. 四角を描く
-                float drawW = laneWidth * 1.0f;
-                float drawX = getLaneCenterX(note.lane, scale);
-                float drawH = 50f * scale; 
-
-                // 画像(batch)ではなく、図形(rect)を描く
-                shapeRenderer.rect(drawX - drawW/2, drawY, drawW, drawH);
-            }
-        }
-        shapeRenderer.end();
-
-        // game.batch.end(); // ← batch終了もコメントアウト
-    }*/
 
     void drawUI() {
         game.batch.begin();
@@ -560,7 +523,7 @@ public class GameScreen extends ScreenAdapter {
             if (music != null) {
                 music.setOnCompletionListener(null);
                 
-                // ★修正：再生中(isPlaying)じゃなくても、強制的にstopを呼んでバッファを解放させる
+                // 再生中(isPlaying)じゃなくても、強制的にstopを呼んでバッファを解放させる
                 music.stop(); 
                 
                 music.dispose();
@@ -568,7 +531,7 @@ public class GameScreen extends ScreenAdapter {
             }
         } catch (Exception e) { }
         
-        // ★追加：使った道具を片付ける
+        // 4. 使った道具を片付ける
         if (fadeRenderer != null) {
             fadeRenderer.dispose();
         }
