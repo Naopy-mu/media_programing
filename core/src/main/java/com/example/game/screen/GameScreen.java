@@ -152,6 +152,9 @@ public class GameScreen extends ScreenAdapter {
         // ★ホールドの「長い帯」を先に描画（ノーツの下に表示させるため）
         drawHoldBodies();
 
+        // ★追加：ここで同時押しラインを描く
+        drawSyncLines();
+
         drawNotes(); // 単押しノーツとホールドの「頭」を描画
         drawUI();
 
@@ -560,6 +563,54 @@ public class GameScreen extends ScreenAdapter {
         float startX = CENTER_X - (totalW / 2.0f);
         float oneLaneW = totalW / 4.0f;
         return startX + (oneLaneW * lane) + (oneLaneW / 2.0f);
+    }
+
+    // ★追加：同時押しライン（Sync Line）の描画
+    void drawSyncLines() {
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+        shapeRenderer.setColor(1f, 1f, 1f, 0.5f); // 半透明の白
+
+        float currentDisplayTime = songPosition - userOffset;
+        float maxDrawZ = 10.0f; // 描画限界距離
+
+        // リスト内の「隣り合うノーツ」を比較していく
+        for (int i = 0; i < noteManager.notes.size - 1; i++) {
+            Note currentNote = noteManager.notes.get(i);
+            Note nextNote = noteManager.notes.get(i + 1);
+
+            // どちらかが非アクティブなら線は引かない
+            if (!currentNote.active || !nextNote.active) continue;
+
+            // 時間の差がほとんどなければ「同時押し」とみなす (誤差0.001秒以内)
+            if (Math.abs(currentNote.targetTime - nextNote.targetTime) < 0.001f) {
+                
+                // --- 座標計算 ---
+                float timeRemains = currentNote.targetTime - currentDisplayTime;
+                float zDistance = timeRemains * scrollSpeed;
+
+                // 画面外ならスキップ
+                if (zDistance < 0 || zDistance > maxDrawZ) continue;
+
+                // 遠近法の計算
+                float scale = getScale(zDistance);
+                float drawY = getScreenY(scale);
+                
+                // 線の太さも遠近法で変える（奥は細く、手前は太く）
+                float lineHeight = 5.0f * scale; 
+
+                // 2つのノーツの中心座標を取得
+                float x1 = getLaneCenterX(currentNote.lane, scale);
+                float x2 = getLaneCenterX(nextNote.lane, scale);
+
+                // 線（細い四角形）を描画
+                // rectLine(x1, y1, x2, y2, width) は始点と終点を指定して線を引く便利なメソッド
+                shapeRenderer.rectLine(x1, drawY, x2, drawY, lineHeight);
+            }
+        }
+        shapeRenderer.end();
+        Gdx.gl.glDisable(GL20.GL_BLEND);
     }
 
     @Override
