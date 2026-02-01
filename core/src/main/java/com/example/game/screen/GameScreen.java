@@ -55,12 +55,12 @@ public class GameScreen extends ScreenAdapter {
 
     ObjectMap<String, Float> bpmMap = new ObjectMap<>();
 
-    // ポーズ機能用の変数
+    // ポーズ機能用
     boolean isPaused = false;
     String[] pauseItems = {"RESUME", "RESTART", "QUIT"};
     int pauseIndex = 0;
 
-    // フェードイン演出用の変数
+    // フェードイン演出用
     private ShapeRenderer fadeRenderer;
     private float fadeInAlpha = 1.0f;
     private boolean isFadingIn = true;
@@ -91,8 +91,12 @@ public class GameScreen extends ScreenAdapter {
         shapeRenderer = new ShapeRenderer();
         noteImg = new Texture("notes-UI.png");
         
-        noteManager = new NoteManager(songName);
-        judgeSystem = new JudgeSystem(noteManager.getTotalNotes());
+        // ★修正1: NoteManagerにBPMを渡して、最大コンボ数を計算させる
+        noteManager = new NoteManager(songName, bpm);
+        
+        // ★修正2: JudgeSystemには「ノーツ数」ではなく「最大コンボ数」を渡して、スコアを100万点に合わせる
+        judgeSystem = new JudgeSystem(noteManager.getMaxCombo());
+        
         effectManager = new EffectManager();
 
         music = Gdx.audio.newMusic(Gdx.files.internal(songName + ".mp3"));
@@ -118,7 +122,6 @@ public class GameScreen extends ScreenAdapter {
         if (isPaused) {
             handlePauseInput();
         } else {
-            // ゲーム進行
             if (!isPlaying) {
                 updateCountdown(delta);
             } else {
@@ -126,13 +129,9 @@ public class GameScreen extends ScreenAdapter {
                 judgeSystem.update(delta);
                 effectManager.update(delta);
                 
-                // ミス判定（通り過ぎたかチェック）
                 noteManager.checkMiss(songPosition - userOffset, judgeSystem);
-
-                // ★追加：ホールド中の判定更新（押し続けているかチェック）
                 updateHolds(delta);
 
-                // タップ判定（始点判定）
                 for (int i = 0; i < GameConfig.LANE_COUNT; i++) {
                     if (Gdx.input.isKeyJustPressed(GameConfig.KEY_MAPPING[i])) {
                         processHit(i);
@@ -146,23 +145,17 @@ public class GameScreen extends ScreenAdapter {
         }
 
         // --- 描画処理 ---
-        drawLanes();
-        drawEffects();
-        
-        // ★ホールドの「長い帯」を先に描画（ノーツの下に表示させるため）
-        drawHoldBodies();
-
-        // ★追加：ここで同時押しラインを描く
-        drawSyncLines();
-
-        drawNotes(); // 単押しノーツとホールドの「頭」を描画
-        drawUI();
+        drawLanes();      
+        drawEffects();    
+        drawHoldBodies(); 
+        drawSyncLines();  
+        drawNotes();      
+        drawUI();         
 
         if (isPaused) {
             drawPauseMenu();
         }
 
-        // フェードイン演出
         if (isFadingIn) {
             fadeInAlpha -= delta * FADE_SPEED;
             if (fadeInAlpha <= 0f) {
@@ -179,38 +172,37 @@ public class GameScreen extends ScreenAdapter {
         }
     }
 
-    // ★追加：ホールド状態の更新ロジック
+    // ホールド状態更新（1拍ごとにコンボ加算 & 完走ボーナス）
     void updateHolds(float delta) {
         float currentDisplayTime = songPosition - userOffset;
 
         for (Note note : noteManager.notes) {
-            // ホールド中でなければスキップ
             if (!note.isHold || !note.active) continue;
 
-            // 1. すでに判定エリアに入ってホールド中の場合
             if (note.isHolding) {
-                // 終了時間を過ぎたら完了
                 if (currentDisplayTime >= note.endTime) {
                     note.isHolding = false;
                     note.active = false;
-                    // ホールド完了エフェクトなどを出しても良い
-                    judgeSystem.combo++;
-                    judgeSystem.score += 500; // 完走ボーナス
+                    // ★修正3: 完走時は専用メソッドを呼ぶ (Combo+1, Score加算)
+                    judgeSystem.finishHold();
                 } else {
-                    // まだ途中：キーが押され続けているかチェック
                     if (Gdx.input.isKeyPressed(GameConfig.KEY_MAPPING[note.lane])) {
-                        // 押されているならスコア加算（Arcaeaのように継続的に加算）
-                        // ここでは簡易的にコンボなどは増やさず、エフェクトだけ維持する例
+                        // 1拍ごとにコンボを加算
+                        note.holdTimer += delta;
+                        if (note.holdTimer >= beatDuration) {
+                            // ★修正4: ホールド中コンボ加算メソッド (Combo+1, Score加算)
+                            judgeSystem.addHoldCombo();
+                            note.holdTimer -= beatDuration; // タイマーリセット
+                        }
+
+                        // エフェクト
                         float scale = getScale(0);
-                        // エフェクトを出し続ける
-                        if (Math.random() < 0.3) { // 毎回出すと重いので確率で
+                        if (Math.random() < 0.3) {
                             effectManager.spawn(getLaneCenterX(note.lane, scale), JUDGEMENT_LINE_Y, getLaneWidth(scale), Color.CYAN);
                         }
                     } else {
-                        // 離してしまったらホールド中断（ArcaeaならここでLost判定だが、今回は判定終了にする）
                         note.isHolding = false;
-                        // note.active = false; // これを有効にすると消える。残したいならfalseにしない
-                        // ミス扱いにするならここでcomboリセットなど
+                        note.holdTimer = 0f;
                         judgeSystem.resetCombo();
                     }
                 }
@@ -218,17 +210,11 @@ public class GameScreen extends ScreenAdapter {
         }
     }
 
-    // ★修正：ヒット処理（始点の判定）
     void processHit(int lane) {
-        float currentDisplayTime = songPosition - userOffset;
-        
         for (Note note : noteManager.notes) {
             if (note.lane != lane || !note.active) continue;
-            
-            // すでにホールド中のノーツは「始点判定」の対象外
             if (note.isHold && note.isHolding) continue;
 
-            // 判定
             Color resultColor = judgeSystem.checkHit(note.targetTime + userOffset, songPosition);
             if (resultColor != null) {
                 if (hitSound != null) hitSound.play();
@@ -237,79 +223,87 @@ public class GameScreen extends ScreenAdapter {
                 effectManager.spawn(getLaneCenterX(lane, scale), JUDGEMENT_LINE_Y, getLaneWidth(scale), resultColor);
 
                 if (note.isHold) {
-                    // ★ホールドの場合：アクティブなまま「ホールド中」フラグを立てる
                     note.isHolding = true;
+                    note.holdTimer = 0f; 
                 } else {
-                    // 単押しの場合：即座に消す
                     note.active = false;
                 }
-                return; // 1回のキーで1個だけ判定
+                return;
             }
         }
     }
 
-    // ★追加：ホールドの「帯（ボディ）」を描画
-    // ★修正：ホールドの「帯（ボディ）」を描画
     void drawHoldBodies() {
         Gdx.gl.glEnable(GL20.GL_BLEND);
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
 
         float currentDisplayTime = songPosition - userOffset;
-
-        // レーンの描画限界距離（drawLanesで使っている値と同じにする）
         final float MAX_DRAW_Z = 10.0f; 
 
         for (Note note : noteManager.notes) {
             if (note.active && note.isHold) {
-                // 始点位置（Z距離）
                 float startZ;
-                if (note.isHolding) {
-                    startZ = 0; // ホールド中は手前に張り付き
-                } else {
-                    float timeToStart = note.targetTime - currentDisplayTime;
-                    startZ = timeToStart * scrollSpeed;
-                }
+                if (note.isHolding) startZ = 0;
+                else startZ = (note.targetTime - currentDisplayTime) * scrollSpeed;
 
-                // 終点位置（Z距離）
-                float timeToEnd = note.endTime - currentDisplayTime;
-                float endZ = timeToEnd * scrollSpeed;
+                float endZ = (note.endTime - currentDisplayTime) * scrollSpeed;
 
-                // --- 修正ポイント ---
-                
-                // 1. 全体が描画範囲外ならスキップ
                 if (endZ < 0 || startZ > MAX_DRAW_Z) continue;
-
-                // 2. 始点が手前すぎる場合の補正（判定ラインより手前は描かない）
                 if (startZ < 0) startZ = 0;
-
-                // 3. ★重要：終点が奥すぎる場合の補正（レーンの上限で切り取る）
                 if (endZ > MAX_DRAW_Z) endZ = MAX_DRAW_Z;
 
-                // --------------------
-
-                // 3D座標計算
                 float scaleStart = getScale(startZ);
                 float scaleEnd = getScale(endZ);
 
                 float x1 = getLaneCenterX(note.lane, scaleStart) - getLaneWidth(scaleStart)/2;
                 float x2 = getLaneCenterX(note.lane, scaleStart) + getLaneWidth(scaleStart)/2;
-                float y1 = getScreenY(scaleStart); // 始点のY
+                float y1 = getScreenY(scaleStart);
 
                 float x3 = getLaneCenterX(note.lane, scaleEnd) + getLaneWidth(scaleEnd)/2;
                 float x4 = getLaneCenterX(note.lane, scaleEnd) - getLaneWidth(scaleEnd)/2;
-                float y2 = getScreenY(scaleEnd);   // 終点のY
+                float y2 = getScreenY(scaleEnd);   
                 
-                // 色の設定
-                if (note.isHolding) {
-                    shapeRenderer.setColor(0f, 1f, 1f, 0.6f); // 発光シアン
-                } else {
-                    shapeRenderer.setColor(0f, 0.5f, 0.5f, 0.4f); // 暗いシアン
-                }
+                if (note.isHolding) shapeRenderer.setColor(0f, 1f, 1f, 0.6f);
+                else shapeRenderer.setColor(0f, 0.5f, 0.5f, 0.4f);
 
-                // 描画
                 shapeRenderer.triangle(x1, y1, x2, y1, x3, y2);
                 shapeRenderer.triangle(x1, y1, x3, y2, x4, y2);
+            }
+        }
+        shapeRenderer.end();
+        Gdx.gl.glDisable(GL20.GL_BLEND);
+    }
+
+    void drawSyncLines() {
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+        shapeRenderer.setColor(1f, 1f, 1f, 0.5f);
+
+        float currentDisplayTime = songPosition - userOffset;
+        float maxDrawZ = 10.0f;
+
+        for (int i = 0; i < noteManager.notes.size - 1; i++) {
+            Note currentNote = noteManager.notes.get(i);
+            Note nextNote = noteManager.notes.get(i + 1);
+
+            if (!currentNote.active || !nextNote.active) continue;
+
+            if (Math.abs(currentNote.targetTime - nextNote.targetTime) < 0.001f) {
+                float timeRemains = currentNote.targetTime - currentDisplayTime;
+                float zDistance = timeRemains * scrollSpeed;
+
+                if (zDistance < 0 || zDistance > maxDrawZ) continue;
+
+                float scale = getScale(zDistance);
+                float drawY = getScreenY(scale);
+                float lineHeight = 5.0f * scale; 
+
+                float x1 = getLaneCenterX(currentNote.lane, scale);
+                float x2 = getLaneCenterX(nextNote.lane, scale);
+
+                shapeRenderer.rectLine(x1, drawY, x2, drawY, lineHeight);
             }
         }
         shapeRenderer.end();
@@ -322,9 +316,6 @@ public class GameScreen extends ScreenAdapter {
 
         for (Note note : noteManager.notes) {
             if (note.active) {
-                // ホールド中で、始点を過ぎている場合は「頭」を描画しない（帯だけにする）
-                // もしプロセカのように「押しっぱなしでも判定ラインに光るノーツを残したい」なら
-                // ここで if (note.isHolding) の処理を変えます。今回はArcaea風なので消します。
                 if (note.isHolding) continue;
 
                 float timeRemains = (note.targetTime + userOffset) - songPosition;
@@ -339,8 +330,7 @@ public class GameScreen extends ScreenAdapter {
                 if (drawY + drawH < LANE_BOTTOM_Y) continue;
 
                 float laneWidth = getLaneWidth(scale);
-                float widthScale = 1.0f; 
-                float drawW = laneWidth * widthScale;
+                float drawW = laneWidth * 1.0f;
                 float drawX = getLaneCenterX(note.lane, scale);
 
                 game.batch.draw(noteImg, drawX - drawW/2, drawY, drawW, drawH);
@@ -349,7 +339,65 @@ public class GameScreen extends ScreenAdapter {
         game.batch.end();
     }
 
-    // --- その他（既存コードと同じ） ---
+    void drawUI() {
+        game.batch.begin();
+        
+        if (!isPlaying && !isPaused) { 
+            game.font.setColor(Color.YELLOW);
+            game.font.getData().setScale(3.0f);
+            if (countdownTimer >= 0) {
+                if (countIndex < 4) game.font.draw(game.batch, "READY...", CENTER_X - 100, 600);
+                else game.font.draw(game.batch, "GO!", CENTER_X - 50, 600);
+            }
+        }
+
+        if (judgeSystem.messageTimer > 0) {
+            float maxTime = judgeSystem.message.startsWith("MISS") ? 1.0f : 0.5f;
+            float progress = judgeSystem.messageTimer / maxTime;
+            float baseScale = 2.5f;
+            float animScale = baseScale + (progress * 0.5f); 
+            float alpha = 1.0f;
+            if (progress < 0.3f) alpha = progress / 0.3f;
+
+            Color c = judgeSystem.messageColor;
+            game.font.setColor(c.r, c.g, c.b, alpha);
+            
+            game.font.getData().setScale(animScale);
+            game.font.draw(game.batch, judgeSystem.message, CENTER_X - (50 * animScale), 450 + (progress * 20));
+
+            if (!judgeSystem.timingMessage.isEmpty()) {
+                if (judgeSystem.timingMessage.equals("FAST")) game.font.setColor(1, 0, 0, alpha);
+                else game.font.setColor(0, 0, 1, alpha);
+                game.font.getData().setScale(1.5f);
+                game.font.draw(game.batch, judgeSystem.timingMessage, CENTER_X - 40, 400);
+            }
+        }
+
+        game.font.setColor(Color.WHITE);
+        game.font.getData().setScale(2.0f);
+        game.font.draw(game.batch, "Music: " + songName, 20, 1050);
+        game.font.draw(game.batch, "BPM: " + (int)bpm, 20, 1010); 
+        game.font.draw(game.batch, "Speed: " + String.format("%.1f", scrollSpeed), 20, 970);
+        game.font.draw(game.batch, "Score: " + (int)judgeSystem.score, 20, 930);
+
+        if (judgeSystem.combo > 0) {
+            switch (judgeSystem.comboStatus) {
+                case 0: game.font.setColor(Color.CYAN); break; // All Perfect
+                case 1: game.font.setColor(Color.GOLD); break; // Full Combo
+                default: game.font.setColor(Color.WHITE); break; // Normal
+            }
+            
+            // ★修正5: サイズ固定・COMBO文字なし
+            game.font.getData().setScale(3.0f); 
+            
+            String comboText = String.valueOf(judgeSystem.combo);
+            float textWidth = comboText.length() * 40f; 
+            game.font.draw(game.batch, comboText, CENTER_X - (textWidth / 2), 600);
+        }
+        
+        game.batch.end();
+    }
+
     void pauseGame() {
         isPaused = true;
         if (music.isPlaying()) music.pause(); 
@@ -363,14 +411,11 @@ public class GameScreen extends ScreenAdapter {
 
     void restartGame() {
         music.setOnCompletionListener(null);
-        if (music.isPlaying()) music.stop(); 
-        else music.stop();
-
+        music.stop(); 
         music.setOnCompletionListener(m -> {
             game.setScreen(new ResultScreen(game, (int)judgeSystem.score, judgeSystem.getRank()));
             dispose();
         });
-        
         isPaused = false;
         isPlaying = false;
         countdownTimer = -0.5f; 
@@ -378,8 +423,10 @@ public class GameScreen extends ScreenAdapter {
         songPosition = 0;
         isQuitting = false;
         
-        noteManager = new NoteManager(songName);
-        judgeSystem = new JudgeSystem(noteManager.getTotalNotes());
+        // ★修正6: リスタート時も正しい引数で初期化
+        noteManager = new NoteManager(songName, bpm);
+        judgeSystem = new JudgeSystem(noteManager.getMaxCombo());
+        
         effectManager = new EffectManager();
     }
 
@@ -521,40 +568,7 @@ public class GameScreen extends ScreenAdapter {
         Gdx.gl.glDisable(GL20.GL_BLEND);
     }
 
-    void drawUI() {
-        game.batch.begin();
-        if (!isPlaying && !isPaused) { 
-            game.font.setColor(Color.YELLOW);
-            game.font.getData().setScale(3.0f);
-            if (countdownTimer >= 0) {
-                if (countIndex < 4) {
-                    game.font.draw(game.batch, "READY...", CENTER_X - 100, 600);
-                } else {
-                    game.font.draw(game.batch, "GO!", CENTER_X - 50, 600);
-                }
-            }
-        }
-        if (judgeSystem.messageTimer > 0) {
-            game.font.setColor(judgeSystem.messageColor);
-            game.font.getData().setScale(2.5f);
-            game.font.draw(game.batch, judgeSystem.message, CENTER_X - 80, 450);
-            if (!judgeSystem.timingMessage.isEmpty()) {
-                if (judgeSystem.timingMessage.equals("FAST")) game.font.setColor(Color.RED);
-                else game.font.setColor(Color.BLUE);
-                game.font.getData().setScale(1.5f);
-                game.font.draw(game.batch, judgeSystem.timingMessage, CENTER_X - 40, 400);
-            }
-        }
-        game.font.setColor(Color.WHITE);
-        game.font.getData().setScale(2.0f);
-        game.font.draw(game.batch, "Music: " + songName, 20, 1050);
-        game.font.draw(game.batch, "BPM: " + (int)bpm, 20, 1010); 
-        game.font.draw(game.batch, "Speed: " + String.format("%.1f", scrollSpeed), 20, 970);
-        game.font.draw(game.batch, "Score: " + (int)judgeSystem.score, 20, 930);
-        game.font.draw(game.batch, "Combo: " + judgeSystem.combo, 20, 890);
-        game.batch.end();
-    }
-
+    // 計算用ヘルパーメソッド（消えていたものを復元）
     float getScale(float zDistance) { return CAMERA_DEPTH / (CAMERA_DEPTH + zDistance); }
     float getScreenY(float scale) { return VANISHING_POINT_Y - (VANISHING_POINT_Y - JUDGEMENT_LINE_Y) * scale; }
     float getLaneWidth(float scale) { return NEAR_WIDTH_TOTAL * scale / 4.0f; }
@@ -563,54 +577,6 @@ public class GameScreen extends ScreenAdapter {
         float startX = CENTER_X - (totalW / 2.0f);
         float oneLaneW = totalW / 4.0f;
         return startX + (oneLaneW * lane) + (oneLaneW / 2.0f);
-    }
-
-    // ★追加：同時押しライン（Sync Line）の描画
-    void drawSyncLines() {
-        Gdx.gl.glEnable(GL20.GL_BLEND);
-        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
-        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
-        shapeRenderer.setColor(1f, 1f, 1f, 0.5f); // 半透明の白
-
-        float currentDisplayTime = songPosition - userOffset;
-        float maxDrawZ = 10.0f; // 描画限界距離
-
-        // リスト内の「隣り合うノーツ」を比較していく
-        for (int i = 0; i < noteManager.notes.size - 1; i++) {
-            Note currentNote = noteManager.notes.get(i);
-            Note nextNote = noteManager.notes.get(i + 1);
-
-            // どちらかが非アクティブなら線は引かない
-            if (!currentNote.active || !nextNote.active) continue;
-
-            // 時間の差がほとんどなければ「同時押し」とみなす (誤差0.001秒以内)
-            if (Math.abs(currentNote.targetTime - nextNote.targetTime) < 0.001f) {
-                
-                // --- 座標計算 ---
-                float timeRemains = currentNote.targetTime - currentDisplayTime;
-                float zDistance = timeRemains * scrollSpeed;
-
-                // 画面外ならスキップ
-                if (zDistance < 0 || zDistance > maxDrawZ) continue;
-
-                // 遠近法の計算
-                float scale = getScale(zDistance);
-                float drawY = getScreenY(scale);
-                
-                // 線の太さも遠近法で変える（奥は細く、手前は太く）
-                float lineHeight = 5.0f * scale; 
-
-                // 2つのノーツの中心座標を取得
-                float x1 = getLaneCenterX(currentNote.lane, scale);
-                float x2 = getLaneCenterX(nextNote.lane, scale);
-
-                // 線（細い四角形）を描画
-                // rectLine(x1, y1, x2, y2, width) は始点と終点を指定して線を引く便利なメソッド
-                shapeRenderer.rectLine(x1, drawY, x2, drawY, lineHeight);
-            }
-        }
-        shapeRenderer.end();
-        Gdx.gl.glDisable(GL20.GL_BLEND);
     }
 
     @Override
@@ -631,8 +597,6 @@ public class GameScreen extends ScreenAdapter {
                 music = null;
             }
         } catch (Exception e) { }
-        if (fadeRenderer != null) {
-            fadeRenderer.dispose();
-        }
+        if (fadeRenderer != null) fadeRenderer.dispose();
     }
 }
