@@ -5,7 +5,7 @@ import com.example.game.Note;
 import com.badlogic.gdx.graphics.Color;
 
 public class JudgeSystem {
-    // 判定基準
+    // 判定基準 (変更なし)
     final float WINDOW_THEORY  = 0.025f;
     final float WINDOW_PERFECT = 0.05f;
     final float WINDOW_GOOD    = 0.10f;
@@ -32,7 +32,7 @@ public class JudgeSystem {
         }
     }
 
-    // 判定処理を行い、結果（エフェクトの色）を返す。判定外ならnull
+    // 判定処理 (変更なし)
     public Color checkHit(float targetTime, float songPosition) {
         float diff = targetTime - songPosition;
         float absDiff = Math.abs(diff);
@@ -71,12 +71,45 @@ public class JudgeSystem {
         combo = 0;
     }
     
-    // ランク計算用
+    // ランク計算用 (変更なし)
     public String getRank() {
         if (score >= 1000000) return "SSS";
         if (score >= 900000) return "S";
         if (score >= 800000) return "A";
         if (score >= 700000) return "B";
         return "C";
+    }
+
+    // ========================================================
+    // ★以下、エラー解消とホールド機能のために追加したメソッド
+    // ========================================================
+
+    // NoteManagerのエラー解消用: 文字列で結果を受け取って既存のmiss()を呼ぶ
+    public void applyResult(String result) {
+        if ("MISS".equals(result)) {
+            miss();
+        }
+    }
+
+    // GameScreenのエラー解消用: ホールドを離した時にコンボを切る
+    public void resetCombo() {
+        combo = 0;
+        // メッセージを出したくない場合はここを空にするだけでもOK
+        // message = "LOST"; 
+        // messageColor = Color.GRAY;
+        // messageTimer = 0.5f;
+    }
+
+    // ホールド押し続け中の加点（1フレームごとの微小加点）
+    public void addHoldScore() {
+        // 例: 1フレームにつき 10点 加算（バランスは調整してください）
+        score += 10;
+        // 上限を超えないようにするならここでチェック
+        if (score > 1000000 + totalNotesBonus()) score = 1000000 + totalNotesBonus();
+    }
+    
+    // 理論値ボーナス分の計算用ヘルパー（上限チェック用）
+    private float totalNotesBonus() {
+        return (1000000f / scorePerNote); 
     }
 }
