@@ -5,14 +5,14 @@ import com.badlogic.gdx.files.FileHandle;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.JsonReader;
 import com.badlogic.gdx.utils.JsonValue;
-import com.example.game.BpmEvent; // 追加
+import com.example.game.BpmEvent;
 import com.example.game.Note;
 
 public class NoteManager {
     public Array<Note> notes;
     private int maxComboCount = 0;
     
-    // ★追加: BPM情報とオフセット
+    // BPM情報とオフセット
     public Array<BpmEvent> bpmEvents = new Array<>();
     public float offset = 0f;
 
@@ -30,7 +30,6 @@ public class NoteManager {
         else if (internalFile.exists()) file = internalFile;
         else {
             createFallbackNotes();
-            // BPMイベントがない場合はデフォルトを1つ入れる
             bpmEvents.add(new BpmEvent(0, defaultBpm));
             calculateMaxCombo();
             return;
@@ -40,14 +39,17 @@ public class NoteManager {
             JsonReader reader = new JsonReader();
             JsonValue root = reader.parse(file);
             
-            // ★オフセット読み込み
+            // オフセット読み込み
             offset = root.getFloat("offset", 0f);
 
-            // ★BPMイベント読み込み
+            // ★修正ポイント：BPMイベント読み込み（デフォルト値を指定してエラー回避）
             JsonValue bpmList = root.get("bpmEvents");
             if (bpmList != null) {
                 for (JsonValue b : bpmList) {
-                    bpmEvents.add(new BpmEvent(b.getFloat("time"), b.getFloat("bpm")));
+                    // time や bpm が省略されていてもエラーにならないように初期値を指定
+                    float time = b.getFloat("time", 0f);
+                    float bpm = b.getFloat("bpm", defaultBpm);
+                    bpmEvents.add(new BpmEvent(time, bpm));
                 }
             }
             // なければデフォルトBPM
@@ -58,15 +60,14 @@ public class NoteManager {
             JsonValue notesList = root.get("notes");
             if (notesList != null) {
                 for (JsonValue noteVal : notesList) {
+                    // ノーツの時間取得（targetTime優先、なければtime、なければ0）
                     float time = 0;
                     if (noteVal.has("targetTime")) time = noteVal.getFloat("targetTime", 0);
                     else time = noteVal.getFloat("time", 0);
 
-                    // ★オフセット適用（エディタではそのまま保存するが、ゲームでは再生位置と合わせるため適用済みとして扱うか、
-                    //   あるいは描画側で引くか。ここではGameScreenで userOffset + offset するのが一般的）
-                    //   今回はデータをそのまま保持します。
-
+                    // レーン取得（なければ0）
                     int lane = noteVal.getInt("lane", 0);
+                    
                     float endTime = 0;
                     boolean isHold = false;
 
@@ -92,13 +93,15 @@ public class NoteManager {
             calculateMaxCombo();
             
         } catch (Exception e) {
+            System.err.println("【NoteManager Error】" + e.getMessage());
             e.printStackTrace();
+            // エラー時はフォールバック
             createFallbackNotes();
+            bpmEvents.clear();
             bpmEvents.add(new BpmEvent(0, defaultBpm));
         }
     }
 
-    // ★可変BPM対応のコンボ計算
     private void calculateMaxCombo() {
         maxComboCount = 0;
         for (Note note : notes) {
@@ -108,7 +111,7 @@ public class NoteManager {
                 
                 // その時点のBPMを取得して拍数を計算
                 float bpmAtStart = getBpmAt(note.targetTime);
-                float beatDuration = 60f / bpmAtStart; // 簡易的に始点のBPMを使用
+                float beatDuration = 60f / bpmAtStart; 
                 
                 int tickCount = (int)(duration / beatDuration);
                 maxComboCount += tickCount;
@@ -117,8 +120,9 @@ public class NoteManager {
         }
     }
 
-    // 指定時間のBPMを取得
     public float getBpmAt(float time) {
+        if (bpmEvents.size == 0) return 120f; // 安全策
+        
         float bpm = bpmEvents.first().bpm;
         for (BpmEvent e : bpmEvents) {
             if (e.time <= time) bpm = e.bpm;
@@ -141,6 +145,8 @@ public class NoteManager {
         for (Note note : notes) {
             if (!note.active) continue;
             if (note.isHold && note.isHolding) continue;
+            
+            // ミス判定（判定ラインを通り過ぎたか）
             if (currentMusicTime > note.targetTime + 0.2f) {
                 note.active = false;
                 judgeSystem.applyResult("MISS");

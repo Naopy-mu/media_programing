@@ -7,12 +7,12 @@ import com.badlogic.gdx.audio.Music;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.Texture;
-import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.graphics.g2d.Animation;
-import com.badlogic.gdx.utils.Array;
+import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.MathUtils;
-import com.example.game.Main;
+import com.badlogic.gdx.utils.Array;
 import com.example.game.GameConfig;
+import com.example.game.Main;
 
 public class SongSelectScreen extends ScreenAdapter {
     final Main game;
@@ -60,48 +60,51 @@ public class SongSelectScreen extends ScreenAdapter {
     public SongSelectScreen(Main game) {
         this.game = game;
         
-        try {
+        // ★修正: AssetManagerから画像を読み込む
+        // TransitionScreenでロード済みのものを取り出す
+        if (game.assetManager.isLoaded("song-select-UI.png")) {
+            panelImg = game.assetManager.get("song-select-UI.png", Texture.class);
+        } else {
+            // 万が一ロードされていなければここで読み込む
             panelImg = new Texture("song-select-UI.png");
-        } catch(Exception e) {
-            System.err.println("UI画像が見つかりません！");
         }
         
         shapeRenderer = new ShapeRenderer();
         currentAnimX = BROWSING_CENTER_X;
 
         // =========================================================
-        // ★設定反映：画像を「全フレーム」読み込む (i += 1)
+        // ★修正: AssetManagerを使って連番画像をリスト化する
         // =========================================================
         
-        // --- 1. ループ画像の読み込み ---
+        // --- 1. ループ画像の取得 ---
         loopTextures = new Array<>();
-        // 指定通り i += 1 に変更
-        for (int i = 1; i <= TOTAL_LOOP_FRAMES; i += 1) { 
+        for (int i = 1; i <= TOTAL_LOOP_FRAMES; i++) { 
             String path = String.format(LOOP_PATH, i);
-            try {
-                if (Gdx.files.internal(path).exists()) {
-                    loopTextures.add(new Texture(Gdx.files.internal(path)));
-                }
-            } catch (Throwable e) { /* 無視 */ }
+            
+            // AssetManagerに読み込まれていれば取得
+            if (game.assetManager.isLoaded(path)) {
+                loopTextures.add(game.assetManager.get(path, Texture.class));
+            } else {
+                // ロードされてない場合は緊急で読み込む（カクつくがエラーは防ぐ）
+                loopTextures.add(new Texture(Gdx.files.internal(path)));
+            }
         }
         if (loopTextures.size > 0) {
-            // 指定通り 1/15秒 間隔
             loopAnimation = new Animation<>(1f / 15f, loopTextures, Animation.PlayMode.LOOP);
         }
 
-        // --- 2. 突入画像の読み込み ---
+        // --- 2. 突入画像の取得 ---
         moveTextures = new Array<>();
-        // 指定通り i += 1 に変更
-        for (int i = 1; i <= TOTAL_MOVE_FRAMES; i += 1) { 
+        for (int i = 1; i <= TOTAL_MOVE_FRAMES; i++) { 
             String path = String.format(MOVE_PATH, i);
-            try {
-                if (Gdx.files.internal(path).exists()) {
-                    moveTextures.add(new Texture(Gdx.files.internal(path)));
-                }
-            } catch (Throwable e) { /* 無視 */ }
+            
+            if (game.assetManager.isLoaded(path)) {
+                moveTextures.add(game.assetManager.get(path, Texture.class));
+            } else {
+                moveTextures.add(new Texture(Gdx.files.internal(path)));
+            }
         }
         if (moveTextures.size > 0) {
-            // 指定通り 1/60秒 間隔
             moveAnimation = new Animation<>(1f / 60f, moveTextures, Animation.PlayMode.NORMAL);
         }
 
@@ -134,10 +137,8 @@ public class SongSelectScreen extends ScreenAdapter {
         
         drawCircularAnimation();
 
-        // 突入アニメ中（PLAYING_INTRO）は UIを一切描画しない
         if (currentState != State.PLAYING_INTRO) {
             game.batch.begin();
-            // フェードアウト中のみ描画
             if (uiAlpha > 0.01f) {
                 drawCirclesAndSpectrum(delta);
                 drawSongList(delta);
@@ -145,7 +146,6 @@ public class SongSelectScreen extends ScreenAdapter {
             game.batch.end();
         }
 
-        // 段階的ホワイトアウト処理
         if (fadeAlpha > 0) {
             Gdx.gl.glEnable(GL20.GL_BLEND);
             Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
@@ -213,7 +213,6 @@ public class SongSelectScreen extends ScreenAdapter {
         if (assetsDisposed) return; 
 
         if (Gdx.input.isKeyJustPressed(Input.Keys.F1)) {
-            // 現在のBGMを止める
             if (previewMusic != null) {
                 previewMusic.stop();
             }
@@ -230,14 +229,13 @@ public class SongSelectScreen extends ScreenAdapter {
             case MOVING_CENTER:
                 float targetX = GameConfig.SCREEN_WIDTH / 2f;
                 currentAnimX = MathUtils.lerp(currentAnimX, targetX, 0.2f);
-                // 中央移動中はUIをフェードアウト
                 uiAlpha = MathUtils.lerp(uiAlpha, 0f, 0.2f); 
 
                 if (Math.abs(currentAnimX - targetX) < 5.0f) {
                     currentAnimX = targetX; 
                     currentState = State.PLAYING_INTRO;
                     moveAnimTime = 0;
-                    uiAlpha = 0f; // UIを完全に消去
+                    uiAlpha = 0f; 
                 }
                 break;
             case PLAYING_INTRO:
@@ -247,7 +245,6 @@ public class SongSelectScreen extends ScreenAdapter {
                     float duration = moveAnimation.getAnimationDuration();
                     float progress = moveAnimTime / duration;
                     
-                    // アニメの後半から白くしていく
                     if (progress > 0.5f) {
                         fadeAlpha = (progress - 0.5f) * 2.0f; 
                     } else {
@@ -257,7 +254,7 @@ public class SongSelectScreen extends ScreenAdapter {
                     if (fadeAlpha > 1.0f) fadeAlpha = 1.0f;
 
                     if (moveAnimation.isAnimationFinished(moveAnimTime)) {
-                        manualDisposeHeavyAssets();
+                        manualDisposeHeavyAssets(); // メモリ解放
                         assetsDisposed = true;
                         game.setScreen(new GameScreen(game, songs[selectedIndex]));
                         return;
@@ -315,16 +312,29 @@ public class SongSelectScreen extends ScreenAdapter {
         }
     }
 
+    // ★修正: AssetManagerの中身を解放する
     private void manualDisposeHeavyAssets() {
-        System.out.println("Switching screens: Disposing heavy assets now...");
-        if (loopTextures != null) {
-            for (Texture t : loopTextures) { if (t != null) t.dispose(); }
-            loopTextures.clear();
+        System.out.println("Switching screens: Unloading heavy assets from Manager...");
+        
+        // AssetManagerに読み込ませたファイルをアンロード（メモリ解放）する
+        // 連番画像
+        for (int i = 1; i <= TOTAL_LOOP_FRAMES; i++) {
+            String path = String.format(LOOP_PATH, i);
+            if (game.assetManager.isLoaded(path)) game.assetManager.unload(path);
         }
-        if (moveTextures != null) {
-            for (Texture t : moveTextures) { if (t != null) t.dispose(); }
-            moveTextures.clear();
+        for (int i = 1; i <= TOTAL_MOVE_FRAMES; i++) {
+            String path = String.format(MOVE_PATH, i);
+            if (game.assetManager.isLoaded(path)) game.assetManager.unload(path);
         }
+        
+        // UI画像
+        if (game.assetManager.isLoaded("song-select-UI.png")) {
+            game.assetManager.unload("song-select-UI.png");
+        }
+        
+        // 配列をクリア
+        if (loopTextures != null) loopTextures.clear();
+        if (moveTextures != null) moveTextures.clear();
     }
 
     @Override
@@ -332,7 +342,7 @@ public class SongSelectScreen extends ScreenAdapter {
         if (!assetsDisposed) {
             manualDisposeHeavyAssets();
         }
-        if (panelImg != null) panelImg.dispose();
+        // 音声とシェイプはここで破棄
         if (previewMusic != null) previewMusic.dispose();
         if (shapeRenderer != null) shapeRenderer.dispose();
     }
