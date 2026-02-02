@@ -25,4 +25,7 @@ public class Note {
         this.isHolding = false;
         this.holdTimer = 0f; // 初期化
     }
+
+    // JSON読み書き用（必須）
+    public Note() {}
 }

@@ -212,6 +212,15 @@ public class SongSelectScreen extends ScreenAdapter {
     void updateLogic(float delta) {
         if (assetsDisposed) return; 
 
+        if (Gdx.input.isKeyJustPressed(Input.Keys.F1)) {
+            // 現在のBGMを止める
+            if (previewMusic != null) {
+                previewMusic.stop();
+            }
+            game.setScreen(new DevSelectScreen(game));
+            return;
+        }
+
         animationTime += delta;
         switch (currentState) {
             case BROWSING:
