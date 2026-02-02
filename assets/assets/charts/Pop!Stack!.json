@@ -1,0 +1,55 @@
+{
+"notes": [
+	{
+		"active": true
+	},
+	{
+		"targetTime": 0.1875,
+		"lane": 2,
+		"active": true,
+		"endTime": 0.1875
+	},
+	{
+		"targetTime": 0.375,
+		"lane": 1,
+		"active": true,
+		"endTime": 0.375
+	},
+	{
+		"targetTime": 0.375,
+		"lane": 3,
+		"active": true,
+		"endTime": 0.375
+	},
+	{
+		"targetTime": 0.75,
+		"active": true,
+		"endTime": 0.75
+	},
+	{
+		"targetTime": 0.75,
+		"lane": 2,
+		"active": true,
+		"endTime": 0.75
+	},
+	{
+		"targetTime": 1.125,
+		"lane": 1,
+		"active": true,
+		"endTime": 1.875,
+		"isHold": true
+	},
+	{
+		"targetTime": 1.125,
+		"lane": 3,
+		"active": true,
+		"endTime": 1.875,
+		"isHold": true
+	}
+],
+"bpmEvents": [
+	{
+		"bpm": 160
+	}
+]
+}

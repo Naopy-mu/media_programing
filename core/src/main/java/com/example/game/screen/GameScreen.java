@@ -43,14 +43,14 @@ public class GameScreen extends ScreenAdapter {
     final float CENTER_X = 1920 / 2f;
     
     float scrollSpeed; 
-    float userOffset;
+    float userOffset; // ユーザー設定 + 譜面オフセットの合計
 
     // カウントダウン用
     boolean isPlaying = false; 
     float countdownTimer = 0;  
     int countIndex = 0;        
-    float bpm = 120;           
-    float beatDuration;        
+    float initialBpm = 120; // 開始時のBPM（カウントダウン計算用）
+    float beatDuration;     // 開始時の1拍の長さ
     float countInterval;       
 
     ObjectMap<String, Float> bpmMap = new ObjectMap<>();
@@ -68,6 +68,10 @@ public class GameScreen extends ScreenAdapter {
 
     private boolean isQuitting = false;
 
+    // ★追加：再開時のカウントダウン用
+    boolean isResuming = false;
+    float resumeTimer = 0;
+
     public GameScreen(Main game, String songName) {
         this.game = game;
         this.songName = songName;
@@ -77,27 +81,32 @@ public class GameScreen extends ScreenAdapter {
         isFadingIn = true;
         
         this.scrollSpeed = GameConfig.getScrollSpeed();
-        this.userOffset = GameConfig.getOffset();
 
+        // 曲ごとの初期BPM（ハードコード値はバックアップ/初期化用）
         bpmMap.put("Link Layer", 156f);
         bpmMap.put("Pop!Stack!", 160f);
         bpmMap.put("Timepiece Tower", 140f);
         bpmMap.put("Eigenstate", 174f);
 
-        this.bpm = bpmMap.get(songName, 140f);
-        this.beatDuration = 60f / this.bpm;
-        this.countInterval = this.beatDuration; 
-
+        this.initialBpm = bpmMap.get(songName, 140f);
+        
         shapeRenderer = new ShapeRenderer();
         noteImg = new Texture("notes-UI.png");
         
-        // ★修正1: NoteManagerにBPMを渡して、最大コンボ数を計算させる
-        noteManager = new NoteManager(songName, bpm);
+        // ★修正1: NoteManagerを初期化 (ここで譜面データ、オフセット、BPMイベントが読み込まれる)
+        noteManager = new NoteManager(songName, initialBpm);
         
-        // ★修正2: JudgeSystemには「ノーツ数」ではなく「最大コンボ数」を渡して、スコアを100万点に合わせる
+        // ★修正2: ユーザー設定オフセット + 譜面ファイル内のオフセット
+        this.userOffset = GameConfig.getOffset() + noteManager.offset;
+
+        // ★修正3: 最大コンボ数に基づいてJudgeSystemを初期化（理論値100万点のため）
         judgeSystem = new JudgeSystem(noteManager.getMaxCombo());
         
         effectManager = new EffectManager();
+
+        // カウントダウン用の計算（初期BPMに基づく）
+        this.beatDuration = 60f / initialBpm;
+        this.countInterval = this.beatDuration; 
 
         music = Gdx.audio.newMusic(Gdx.files.internal(songName + ".mp3"));
         music.setVolume(0.3f);
@@ -121,6 +130,8 @@ public class GameScreen extends ScreenAdapter {
 
         if (isPaused) {
             handlePauseInput();
+        } else if (isResuming) {
+            updateResumeCountdown(delta);
         } else {
             if (!isPlaying) {
                 updateCountdown(delta);
@@ -169,10 +180,32 @@ public class GameScreen extends ScreenAdapter {
             fadeRenderer.rect(0, 0, GameConfig.SCREEN_WIDTH, GameConfig.SCREEN_HEIGHT);
             fadeRenderer.end();
             Gdx.gl.glDisable(GL20.GL_BLEND);
+            }
+        }
+
+        void updateResumeCountdown(float delta) {
+        // 音を鳴らすための整数値チェック（3.0 -> 2.9 になった瞬間など）
+        int prevCeil = (int)Math.ceil(resumeTimer);
+        
+        resumeTimer -= delta;
+        
+        int currentCeil = (int)Math.ceil(resumeTimer);
+
+        // 数字が減った瞬間に音を鳴らす (3, 2, 1)
+        if (currentCeil < prevCeil && currentCeil > 0) {
+            if (countSound != null) countSound.play();
+        }
+
+        // 0になったらゲーム再開
+        if (resumeTimer <= 0) {
+            isResuming = false;
+            if (isPlaying) {
+                music.play();
+            }
         }
     }
 
-    // ホールド状態更新（1拍ごとにコンボ加算 & 完走ボーナス）
+    // ★修正4: ホールド状態更新（可変BPM対応）
     void updateHolds(float delta) {
         float currentDisplayTime = songPosition - userOffset;
 
@@ -181,18 +214,25 @@ public class GameScreen extends ScreenAdapter {
 
             if (note.isHolding) {
                 if (currentDisplayTime >= note.endTime) {
+                    // 完走処理
                     note.isHolding = false;
                     note.active = false;
-                    // ★修正3: 完走時は専用メソッドを呼ぶ (Combo+1, Score加算)
-                    judgeSystem.finishHold();
+                    // ★修正: 完走時は専用メソッドを呼ぶ (Combo+1, Score加算)
+                    judgeSystem.finishHold(); 
                 } else {
                     if (Gdx.input.isKeyPressed(GameConfig.KEY_MAPPING[note.lane])) {
-                        // 1拍ごとにコンボを加算
+                        // タイマー加算
                         note.holdTimer += delta;
-                        if (note.holdTimer >= beatDuration) {
-                            // ★修正4: ホールド中コンボ加算メソッド (Combo+1, Score加算)
+
+                        // ★重要: その瞬間のBPMを取得して、1拍の長さを計算する
+                        float currentBpm = noteManager.getBpmAt(currentDisplayTime);
+                        float currentBeatDuration = 60f / currentBpm;
+
+                        // 1拍経過したかチェック
+                        if (note.holdTimer >= currentBeatDuration) {
+                            // ★修正: ホールド中コンボ加算メソッド (Combo+1, Score加算)
                             judgeSystem.addHoldCombo();
-                            note.holdTimer -= beatDuration; // タイマーリセット
+                            note.holdTimer -= currentBeatDuration; // タイマーリセット
                         }
 
                         // エフェクト
@@ -201,6 +241,7 @@ public class GameScreen extends ScreenAdapter {
                             effectManager.spawn(getLaneCenterX(note.lane, scale), JUDGEMENT_LINE_Y, getLaneWidth(scale), Color.CYAN);
                         }
                     } else {
+                        // 途中離し（ミス扱い）
                         note.isHolding = false;
                         note.holdTimer = 0f;
                         judgeSystem.resetCombo();
@@ -342,12 +383,25 @@ public class GameScreen extends ScreenAdapter {
     void drawUI() {
         game.batch.begin();
         
-        if (!isPlaying && !isPaused) { 
+        // 1. 開始前のカウントダウン (変更なし)
+        if (!isPlaying && !isPaused && !isResuming) { 
             game.font.setColor(Color.YELLOW);
             game.font.getData().setScale(3.0f);
             if (countdownTimer >= 0) {
                 if (countIndex < 4) game.font.draw(game.batch, "READY...", CENTER_X - 100, 600);
                 else game.font.draw(game.batch, "GO!", CENTER_X - 50, 600);
+            }
+        }
+
+        // ★追加：Resume時のカウントダウン表示
+        if (isResuming) {
+            game.font.setColor(Color.CYAN);
+            game.font.getData().setScale(5.0f); // デカく表示
+            
+            // 切り上げで整数を表示 (3.0~2.0 -> "3", 2.0~1.0 -> "2", 1.0~0.0 -> "1")
+            int count = (int)Math.ceil(resumeTimer);
+            if (count > 0) {
+                game.font.draw(game.batch, String.valueOf(count), CENTER_X - 20, 600);
             }
         }
 
@@ -376,18 +430,22 @@ public class GameScreen extends ScreenAdapter {
         game.font.setColor(Color.WHITE);
         game.font.getData().setScale(2.0f);
         game.font.draw(game.batch, "Music: " + songName, 20, 1050);
-        game.font.draw(game.batch, "BPM: " + (int)bpm, 20, 1010); 
+        
+        // ★修正5: 現在のBPMを表示
+        float currentBpm = noteManager.getBpmAt(songPosition - userOffset);
+        game.font.draw(game.batch, "BPM: " + (int)currentBpm, 20, 1010); 
+        
         game.font.draw(game.batch, "Speed: " + String.format("%.1f", scrollSpeed), 20, 970);
         game.font.draw(game.batch, "Score: " + (int)judgeSystem.score, 20, 930);
 
         if (judgeSystem.combo > 0) {
             switch (judgeSystem.comboStatus) {
-                case 0: game.font.setColor(Color.CYAN); break; // All Perfect
-                case 1: game.font.setColor(Color.GOLD); break; // Full Combo
+                case 0: game.font.setColor(Color.GOLD); break; // All Perfect
+                case 1: game.font.setColor(Color.CYAN); break; // Full Combo
                 default: game.font.setColor(Color.WHITE); break; // Normal
             }
             
-            // ★修正5: サイズ固定・COMBO文字なし
+            // ★修正6: サイズ固定・COMBO文字なし
             game.font.getData().setScale(3.0f); 
             
             String comboText = String.valueOf(judgeSystem.combo);
@@ -406,7 +464,11 @@ public class GameScreen extends ScreenAdapter {
 
     void resumeGame() {
         isPaused = false;
-        if (isPlaying) music.play();
+        
+        // ★修正：いきなり music.play() せず、再開モードに移行
+        // 3秒前からカウントダウン開始
+        isResuming = true;
+        resumeTimer = 3.0f;
     }
 
     void restartGame() {
@@ -423,8 +485,9 @@ public class GameScreen extends ScreenAdapter {
         songPosition = 0;
         isQuitting = false;
         
-        // ★修正6: リスタート時も正しい引数で初期化
-        noteManager = new NoteManager(songName, bpm);
+        // ★修正7: リスタート時も正しい引数で初期化
+        noteManager = new NoteManager(songName, initialBpm);
+        this.userOffset = GameConfig.getOffset() + noteManager.offset;
         judgeSystem = new JudgeSystem(noteManager.getMaxCombo());
         
         effectManager = new EffectManager();
@@ -568,7 +631,6 @@ public class GameScreen extends ScreenAdapter {
         Gdx.gl.glDisable(GL20.GL_BLEND);
     }
 
-    // 計算用ヘルパーメソッド（消えていたものを復元）
     float getScale(float zDistance) { return CAMERA_DEPTH / (CAMERA_DEPTH + zDistance); }
     float getScreenY(float scale) { return VANISHING_POINT_Y - (VANISHING_POINT_Y - JUDGEMENT_LINE_Y) * scale; }
     float getLaneWidth(float scale) { return NEAR_WIDTH_TOTAL * scale / 4.0f; }

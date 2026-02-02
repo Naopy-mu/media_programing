@@ -1,0 +1,55 @@
+{
+"notes": [
+	{
+		"active": true
+	},
+	{
+		"targetTime": 0.1923077,
+		"active": true,
+		"endTime": 0.1923077
+	},
+	{
+		"targetTime": 0.1923077,
+		"lane": 3,
+		"active": true,
+		"endTime": 0.1923077
+	},
+	{
+		"targetTime": 0.3846154,
+		"lane": 1,
+		"active": true,
+		"endTime": 0.3846154
+	},
+	{
+		"targetTime": 0.5769231,
+		"lane": 2,
+		"active": true,
+		"endTime": 0.5769231
+	},
+	{
+		"targetTime": 0.7692308,
+		"lane": 3,
+		"active": true,
+		"endTime": 0.7692308
+	},
+	{
+		"targetTime": 0.7692308,
+		"lane": 1,
+		"active": true,
+		"endTime": 0.7692308
+	},
+	{
+		"targetTime": 1.1538461,
+		"lane": 2,
+		"active": true,
+		"endTime": 1.923077,
+		"isHold": true
+	},
+	{
+		"targetTime": 1.1538461,
+		"active": true,
+		"endTime": 1.923077,
+		"isHold": true
+	}
+]
+}
