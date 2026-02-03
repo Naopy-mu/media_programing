@@ -60,12 +60,10 @@ public class SongSelectScreen extends ScreenAdapter {
     public SongSelectScreen(Main game) {
         this.game = game;
         
-        // ★修正: AssetManagerから画像を読み込む
-        // TransitionScreenでロード済みのものを取り出す
+        // AssetManagerから画像を読み込む
         if (game.assetManager.isLoaded("song-select-UI.png")) {
             panelImg = game.assetManager.get("song-select-UI.png", Texture.class);
         } else {
-            // 万が一ロードされていなければここで読み込む
             panelImg = new Texture("song-select-UI.png");
         }
         
@@ -73,19 +71,16 @@ public class SongSelectScreen extends ScreenAdapter {
         currentAnimX = BROWSING_CENTER_X;
 
         // =========================================================
-        // ★修正: AssetManagerを使って連番画像をリスト化する
+        // アニメーション素材の取得 (AssetManager)
         // =========================================================
         
-        // --- 1. ループ画像の取得 ---
+        // 1. ループ画像
         loopTextures = new Array<>();
         for (int i = 1; i <= TOTAL_LOOP_FRAMES; i++) { 
             String path = String.format(LOOP_PATH, i);
-            
-            // AssetManagerに読み込まれていれば取得
             if (game.assetManager.isLoaded(path)) {
                 loopTextures.add(game.assetManager.get(path, Texture.class));
             } else {
-                // ロードされてない場合は緊急で読み込む（カクつくがエラーは防ぐ）
                 loopTextures.add(new Texture(Gdx.files.internal(path)));
             }
         }
@@ -93,11 +88,10 @@ public class SongSelectScreen extends ScreenAdapter {
             loopAnimation = new Animation<>(1f / 15f, loopTextures, Animation.PlayMode.LOOP);
         }
 
-        // --- 2. 突入画像の取得 ---
+        // 2. 突入画像
         moveTextures = new Array<>();
         for (int i = 1; i <= TOTAL_MOVE_FRAMES; i++) { 
             String path = String.format(MOVE_PATH, i);
-            
             if (game.assetManager.isLoaded(path)) {
                 moveTextures.add(game.assetManager.get(path, Texture.class));
             } else {
@@ -142,6 +136,7 @@ public class SongSelectScreen extends ScreenAdapter {
             if (uiAlpha > 0.01f) {
                 drawCirclesAndSpectrum(delta);
                 drawSongList(delta);
+                drawUI(delta); // ★追加: 操作ガイド表示
             }
             game.batch.end();
         }
@@ -212,11 +207,17 @@ public class SongSelectScreen extends ScreenAdapter {
     void updateLogic(float delta) {
         if (assetsDisposed) return; 
 
+        // ★修正: F1キーでデバッグモード
         if (Gdx.input.isKeyJustPressed(Input.Keys.F1)) {
-            if (previewMusic != null) {
-                previewMusic.stop();
-            }
+            if (previewMusic != null) previewMusic.stop();
             game.setScreen(new DevSelectScreen(game));
+            return;
+        }
+
+        // ★追加: Oキーでオプション画面へ
+        if (Gdx.input.isKeyJustPressed(Input.Keys.O)) {
+            if (previewMusic != null) previewMusic.stop();
+            game.setScreen(new OptionScreen(game));
             return;
         }
 
@@ -254,7 +255,7 @@ public class SongSelectScreen extends ScreenAdapter {
                     if (fadeAlpha > 1.0f) fadeAlpha = 1.0f;
 
                     if (moveAnimation.isAnimationFinished(moveAnimTime)) {
-                        manualDisposeHeavyAssets(); // メモリ解放
+                        manualDisposeHeavyAssets(); 
                         assetsDisposed = true;
                         game.setScreen(new GameScreen(game, songs[selectedIndex]));
                         return;
@@ -300,6 +301,17 @@ public class SongSelectScreen extends ScreenAdapter {
         game.batch.setColor(1, 1, 1, 1);
     }
 
+    // ★追加: 操作ガイドの表示
+    void drawUI(float delta) {
+        game.font.getData().setScale(1.5f);
+        game.font.setColor(Color.LIGHT_GRAY);
+        // 左下に操作説明を表示
+        game.font.draw(game.batch, "[SPACE] START   [O] OPTION", 20, 50);
+        
+        // 右下にデバッグ等の表示
+        game.font.draw(game.batch, "[F1] DEV MODE", GameConfig.SCREEN_WIDTH - 250, 50);
+    }
+
     void handleInput() {
         if (Gdx.input.isKeyJustPressed(Input.Keys.UP)) {
             selectedIndex--; if (selectedIndex < 0) selectedIndex = songs.length - 1; playPreview(songs[selectedIndex]);
@@ -312,12 +324,9 @@ public class SongSelectScreen extends ScreenAdapter {
         }
     }
 
-    // ★修正: AssetManagerの中身を解放する
     private void manualDisposeHeavyAssets() {
         System.out.println("Switching screens: Unloading heavy assets from Manager...");
         
-        // AssetManagerに読み込ませたファイルをアンロード（メモリ解放）する
-        // 連番画像
         for (int i = 1; i <= TOTAL_LOOP_FRAMES; i++) {
             String path = String.format(LOOP_PATH, i);
             if (game.assetManager.isLoaded(path)) game.assetManager.unload(path);
@@ -327,12 +336,10 @@ public class SongSelectScreen extends ScreenAdapter {
             if (game.assetManager.isLoaded(path)) game.assetManager.unload(path);
         }
         
-        // UI画像
         if (game.assetManager.isLoaded("song-select-UI.png")) {
             game.assetManager.unload("song-select-UI.png");
         }
         
-        // 配列をクリア
         if (loopTextures != null) loopTextures.clear();
         if (moveTextures != null) moveTextures.clear();
     }
@@ -342,7 +349,6 @@ public class SongSelectScreen extends ScreenAdapter {
         if (!assetsDisposed) {
             manualDisposeHeavyAssets();
         }
-        // 音声とシェイプはここで破棄
         if (previewMusic != null) previewMusic.dispose();
         if (shapeRenderer != null) shapeRenderer.dispose();
     }
