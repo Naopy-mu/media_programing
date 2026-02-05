@@ -12,24 +12,35 @@ public class JudgeSystem {
     public float score = 0;
     public int combo = 0;
     
-    // 1コンボあたりのスコア（1,000,000 / 最大コンボ数）
-    public float scorePerCombo = 0;
+    // ★追加: リザルト表示用の集計カウンター
+    public int maxCombo = 0;
+    public int perfectCount = 0; // Perfect!! (Cyan)
+    public int greatCount = 0;   // Perfect (Yellow)
+    public int goodCount = 0;    // Good
+    public int missCount = 0;    // Miss
     
-    // 0: All Perfect, 1: Full Combo, 2: Normal
-    public int comboStatus = 0;
+    public float scorePerCombo = 0;
+    public int comboStatus = 0; // 0:AP, 1:FC, 2:Normal
 
-    // 表示用メッセージ
     public String message = "";
     public String timingMessage = "";
     public Color messageColor = Color.WHITE;
     public float messageTimer = 0;
 
-    // コンストラクタ：最大コンボ数を受け取る
     public JudgeSystem(int maxPossibleCombo) {
         if (maxPossibleCombo > 0) {
             scorePerCombo = 1000000f / maxPossibleCombo;
         }
         comboStatus = 0;
+        
+        // カウンター初期化
+        score = 0;
+        combo = 0;
+        maxCombo = 0;
+        perfectCount = 0;
+        greatCount = 0;
+        goodCount = 0;
+        missCount = 0;
     }
 
     public void update(float deltaTime) {
@@ -38,92 +49,84 @@ public class JudgeSystem {
         }
     }
 
-    // タップ時の判定
     public Color checkHit(float targetTime, float songPosition) {
         float diff = targetTime - songPosition;
         float absDiff = Math.abs(diff);
 
-        if (absDiff > WINDOW_GOOD) return null; // 判定外
+        if (absDiff > WINDOW_GOOD) return null;
 
         timingMessage = (diff > 0) ? "FAST" : "LATE";
         messageTimer = 0.5f;
         
-        // コンボ加算（始点）
-        addCombo();
+        increaseCombo(); // コンボ加算処理を共通化
 
         if (absDiff <= WINDOW_THEORY) {
             message = "PERFECT!!";
             messageColor = Color.CYAN;
             timingMessage = ""; 
             score += scorePerCombo; 
+            perfectCount++; // ★加算
             return Color.CYAN;
         } else if (absDiff <= WINDOW_PERFECT) {
             message = "PERFECT";
             messageColor = Color.YELLOW;
             score += scorePerCombo;
+            greatCount++;   // ★加算
             return Color.YELLOW;
         } else {
-            if (comboStatus == 0) comboStatus = 1; // AP -> FC
+            if (comboStatus == 0) comboStatus = 1;
             message = "GOOD";
             messageColor = Color.GREEN;
-            score += scorePerCombo * 0.5f; // GOODは半分
+            score += scorePerCombo * 0.5f;
+            goodCount++;    // ★加算
             return Color.GREEN;
         }
     }
 
-    // 単純なコンボ加算
-    public void addCombo() {
+    // コンボ処理の共通化
+    private void increaseCombo() {
         combo++;
+        if (combo > maxCombo) maxCombo = combo; // 最大コンボ更新
     }
 
-    // ホールド中の1拍ごとの加算（コンボ+1, スコア満点）
     public void addHoldCombo() {
-        combo++;
+        increaseCombo();
         score += scorePerCombo;
     }
 
-    // ホールド完走時の加算（コンボ+1, スコア満点）
     public void finishHold() {
-        combo++;
+        increaseCombo();
         score += scorePerCombo;
     }
 
-    // ミス処理
     public void miss() {
         message = "MISS...";
         timingMessage = "";
         messageColor = Color.GRAY;
         messageTimer = 1.0f;
         combo = 0;
-        comboStatus = 2; // Normalへ
+        comboStatus = 2;
+        missCount++; // ★加算
     }
     
-    // 外部からの結果適用
     public void applyResult(String result) {
-        if ("MISS".equals(result)) {
-            miss();
-        }
+        if ("MISS".equals(result)) miss();
     }
 
-    // コンボリセット（ホールドを離した時など）
     public void resetCombo() {
         if (combo > 0) {
             combo = 0;
             comboStatus = 2;
+            missCount++; // 途中離しもミス扱いなら加算
         }
     }
     
-    // 廃止されたメソッド（互換性のために空で残すか削除）
-    public void addHoldScore() {
-        // 何もしない
-    }
-    
-    // ランク計算（浮動小数点の誤差を考慮して少し甘めに）
     public String getRank() {
-        if (score >= 999950) return "SSS"; 
-        if (score >= 900000) return "S";
-        if (score >= 800000) return "A";
-        if (score >= 700000) return "B";
-        return "C";
+        if (score >= 980000) return "S+"; 
+        if (score >= 950000) return "S";
+        if (score >= 900000) return "A";
+        if (score >= 800000) return "B";
+        if (score >= 700000) return "C";
+        return "D";
     }
 }

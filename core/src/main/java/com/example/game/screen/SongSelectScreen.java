@@ -136,7 +136,7 @@ public class SongSelectScreen extends ScreenAdapter {
             if (uiAlpha > 0.01f) {
                 drawCirclesAndSpectrum(delta);
                 drawSongList(delta);
-                drawUI(delta); // ★追加: 操作ガイド表示
+                drawUI(delta); 
             }
             game.batch.end();
         }
@@ -207,14 +207,12 @@ public class SongSelectScreen extends ScreenAdapter {
     void updateLogic(float delta) {
         if (assetsDisposed) return; 
 
-        // ★修正: F1キーでデバッグモード
         if (Gdx.input.isKeyJustPressed(Input.Keys.F1)) {
             if (previewMusic != null) previewMusic.stop();
             game.setScreen(new DevSelectScreen(game));
             return;
         }
 
-        // ★追加: Oキーでオプション画面へ
         if (Gdx.input.isKeyJustPressed(Input.Keys.O)) {
             if (previewMusic != null) previewMusic.stop();
             game.setScreen(new OptionScreen(game));
@@ -293,22 +291,23 @@ public class SongSelectScreen extends ScreenAdapter {
             float imgH = imgW * aspectRatio;   
             game.batch.setColor(1f, 1f, 1f, alpha);
             game.batch.draw(panelImg, itemX, itemY - imgH/2, imgW, imgH);
-            game.font.getData().setScale(2.0f * scale);
+            
+            // ★変更点: フォントサイズを大きく (2.0 -> 2.8)
+            game.font.getData().setScale(2.8f * scale);
+            
             Color c = (i == selectedIndex) ? Color.WHITE : Color.LIGHT_GRAY;
             game.font.setColor(c.r, c.g, c.b, alpha);
-            game.font.draw(game.batch, songs[i], itemX + 50, itemY + 20);
+            
+            // ★変更点: 表示位置を右にずらす (+50 -> +130)
+            game.font.draw(game.batch, songs[i], itemX + 130, itemY + 30);
         }
         game.batch.setColor(1, 1, 1, 1);
     }
 
-    // ★追加: 操作ガイドの表示
     void drawUI(float delta) {
         game.font.getData().setScale(1.5f);
         game.font.setColor(Color.LIGHT_GRAY);
-        // 左下に操作説明を表示
         game.font.draw(game.batch, "[SPACE] START   [O] OPTION", 20, 50);
-        
-        // 右下にデバッグ等の表示
         game.font.draw(game.batch, "[F1] DEV MODE", GameConfig.SCREEN_WIDTH - 250, 50);
     }
 

@@ -43,24 +43,21 @@ public class GameScreen extends ScreenAdapter {
     final float CENTER_X = 1920 / 2f;
     
     float scrollSpeed; 
-    float userOffset; // ユーザー設定 + 譜面オフセットの合計
+    float userOffset; 
 
-    // カウントダウン用
     boolean isPlaying = false; 
     float countdownTimer = 0;  
     int countIndex = 0;        
-    float initialBpm = 120; // 開始時のBPM（カウントダウン計算用）
-    float beatDuration;     // 開始時の1拍の長さ
+    float initialBpm = 120; 
+    float beatDuration;     
     float countInterval;       
 
     ObjectMap<String, Float> bpmMap = new ObjectMap<>();
 
-    // ポーズ機能用
     boolean isPaused = false;
     String[] pauseItems = {"RESUME", "RESTART", "QUIT"};
     int pauseIndex = 0;
 
-    // フェードイン演出用
     private ShapeRenderer fadeRenderer;
     private float fadeInAlpha = 1.0f;
     private boolean isFadingIn = true;
@@ -68,7 +65,6 @@ public class GameScreen extends ScreenAdapter {
 
     private boolean isQuitting = false;
 
-    // ★追加：再開時のカウントダウン用
     boolean isResuming = false;
     float resumeTimer = 0;
 
@@ -82,7 +78,6 @@ public class GameScreen extends ScreenAdapter {
         
         this.scrollSpeed = GameConfig.getScrollSpeed();
 
-        // 曲ごとの初期BPM（ハードコード値はバックアップ/初期化用）
         bpmMap.put("Link Layer", 156f);
         bpmMap.put("Pop!Stack!", 160f);
         bpmMap.put("Timepiece Tower", 140f);
@@ -93,26 +88,22 @@ public class GameScreen extends ScreenAdapter {
         shapeRenderer = new ShapeRenderer();
         noteImg = new Texture("notes-UI.png");
         
-        // ★修正1: NoteManagerを初期化 (ここで譜面データ、オフセット、BPMイベントが読み込まれる)
         noteManager = new NoteManager(songName, initialBpm);
-        
-        // ★修正2: ユーザー設定オフセット + 譜面ファイル内のオフセット
         this.userOffset = GameConfig.getOffset() + noteManager.offset;
 
-        // ★修正3: 最大コンボ数に基づいてJudgeSystemを初期化（理論値100万点のため）
         judgeSystem = new JudgeSystem(noteManager.getMaxCombo());
         
         effectManager = new EffectManager();
 
-        // カウントダウン用の計算（初期BPMに基づく）
         this.beatDuration = 60f / initialBpm;
         this.countInterval = this.beatDuration; 
 
         music = Gdx.audio.newMusic(Gdx.files.internal(songName + ".mp3"));
         music.setVolume(0.3f);
+        
+        // 曲終了時にリザルトへ
         music.setOnCompletionListener(m -> {
-            game.setScreen(new ResultScreen(game, (int)judgeSystem.score, judgeSystem.getRank()));
-            dispose();
+            forceFinishGame();
         });
         
         try { hitSound = Gdx.audio.newSound(Gdx.files.internal("hit.mp3")); } catch (Exception e) {}
@@ -127,6 +118,12 @@ public class GameScreen extends ScreenAdapter {
     @Override
     public void render(float delta) {
         ScreenUtils.clear(0, 0, 0, 1);
+
+        // ★追加: 開発者モード (F1で強制リザルト)
+        if (Gdx.input.isKeyJustPressed(Input.Keys.F1)) {
+            forceFinishGame();
+            return;
+        }
 
         if (isPaused) {
             handlePauseInput();
@@ -155,7 +152,6 @@ public class GameScreen extends ScreenAdapter {
             }
         }
 
-        // --- 描画処理 ---
         drawLanes();      
         drawEffects();    
         drawHoldBodies(); 
@@ -180,23 +176,56 @@ public class GameScreen extends ScreenAdapter {
             fadeRenderer.rect(0, 0, GameConfig.SCREEN_WIDTH, GameConfig.SCREEN_HEIGHT);
             fadeRenderer.end();
             Gdx.gl.glDisable(GL20.GL_BLEND);
+        }
+    }
+
+    // ★追加: ゲームを強制終了してリザルトへ飛ぶメソッド
+    // (F1キーと、曲終了時の両方で使います)
+    private void forceFinishGame() {
+        if (music != null) {
+            music.setOnCompletionListener(null); // 二重発火防止
+            music.stop();
+        }
+        
+        game.setScreen(new ResultScreen(
+            game, 
+            (int)judgeSystem.score, 
+            judgeSystem.maxCombo, 
+            judgeSystem.perfectCount, 
+            judgeSystem.greatCount, 
+            judgeSystem.goodCount, 
+            judgeSystem.missCount
+        ));
+        dispose();
+    }
+
+    void updateCountdown(float delta) {
+        countdownTimer += delta;
+        if (countdownTimer < 0) return;
+
+        if (countIndex < 4) {
+            if (countdownTimer >= countIndex * countInterval) {
+                if (countSound != null) countSound.play();
+                countIndex++;
+            }
+        } else {
+            float startTime = (4 * countInterval) + (2 * beatDuration);
+            if (countdownTimer >= startTime) {
+                music.play();
+                isPlaying = true;
             }
         }
+    }
 
-        void updateResumeCountdown(float delta) {
-        // 音を鳴らすための整数値チェック（3.0 -> 2.9 になった瞬間など）
+    void updateResumeCountdown(float delta) {
         int prevCeil = (int)Math.ceil(resumeTimer);
-        
         resumeTimer -= delta;
-        
         int currentCeil = (int)Math.ceil(resumeTimer);
 
-        // 数字が減った瞬間に音を鳴らす (3, 2, 1)
         if (currentCeil < prevCeil && currentCeil > 0) {
             if (countSound != null) countSound.play();
         }
 
-        // 0になったらゲーム再開
         if (resumeTimer <= 0) {
             isResuming = false;
             if (isPlaying) {
@@ -205,7 +234,6 @@ public class GameScreen extends ScreenAdapter {
         }
     }
 
-    // ★修正4: ホールド状態更新（可変BPM対応）
     void updateHolds(float delta) {
         float currentDisplayTime = songPosition - userOffset;
 
@@ -214,34 +242,25 @@ public class GameScreen extends ScreenAdapter {
 
             if (note.isHolding) {
                 if (currentDisplayTime >= note.endTime) {
-                    // 完走処理
                     note.isHolding = false;
                     note.active = false;
-                    // ★修正: 完走時は専用メソッドを呼ぶ (Combo+1, Score加算)
                     judgeSystem.finishHold(); 
                 } else {
                     if (Gdx.input.isKeyPressed(GameConfig.KEY_MAPPING[note.lane])) {
-                        // タイマー加算
                         note.holdTimer += delta;
-
-                        // ★重要: その瞬間のBPMを取得して、1拍の長さを計算する
                         float currentBpm = noteManager.getBpmAt(currentDisplayTime);
                         float currentBeatDuration = 60f / currentBpm;
 
-                        // 1拍経過したかチェック
                         if (note.holdTimer >= currentBeatDuration) {
-                            // ★修正: ホールド中コンボ加算メソッド (Combo+1, Score加算)
                             judgeSystem.addHoldCombo();
-                            note.holdTimer -= currentBeatDuration; // タイマーリセット
+                            note.holdTimer -= currentBeatDuration; 
                         }
 
-                        // エフェクト
                         float scale = getScale(0);
                         if (Math.random() < 0.3) {
                             effectManager.spawn(getLaneCenterX(note.lane, scale), JUDGEMENT_LINE_Y, getLaneWidth(scale), Color.CYAN);
                         }
                     } else {
-                        // 途中離し（ミス扱い）
                         note.isHolding = false;
                         note.holdTimer = 0f;
                         judgeSystem.resetCombo();
@@ -259,7 +278,6 @@ public class GameScreen extends ScreenAdapter {
             Color resultColor = judgeSystem.checkHit(note.targetTime + userOffset, songPosition);
             if (resultColor != null) {
                 if (hitSound != null) hitSound.play();
-                
                 float scale = getScale(0);
                 effectManager.spawn(getLaneCenterX(lane, scale), JUDGEMENT_LINE_Y, getLaneWidth(scale), resultColor);
 
@@ -383,7 +401,6 @@ public class GameScreen extends ScreenAdapter {
     void drawUI() {
         game.batch.begin();
         
-        // 1. 開始前のカウントダウン (変更なし)
         if (!isPlaying && !isPaused && !isResuming) { 
             game.font.setColor(Color.YELLOW);
             game.font.getData().setScale(3.0f);
@@ -393,12 +410,10 @@ public class GameScreen extends ScreenAdapter {
             }
         }
 
-        // ★追加：Resume時のカウントダウン表示
         if (isResuming) {
             game.font.setColor(Color.CYAN);
-            game.font.getData().setScale(5.0f); // デカく表示
+            game.font.getData().setScale(5.0f); 
             
-            // 切り上げで整数を表示 (3.0~2.0 -> "3", 2.0~1.0 -> "2", 1.0~0.0 -> "1")
             int count = (int)Math.ceil(resumeTimer);
             if (count > 0) {
                 game.font.draw(game.batch, String.valueOf(count), CENTER_X - 20, 600);
@@ -431,7 +446,6 @@ public class GameScreen extends ScreenAdapter {
         game.font.getData().setScale(2.0f);
         game.font.draw(game.batch, "Music: " + songName, 20, 1050);
         
-        // ★修正5: 現在のBPMを表示
         float currentBpm = noteManager.getBpmAt(songPosition - userOffset);
         game.font.draw(game.batch, "BPM: " + (int)currentBpm, 20, 1010); 
         
@@ -440,18 +454,22 @@ public class GameScreen extends ScreenAdapter {
 
         if (judgeSystem.combo > 0) {
             switch (judgeSystem.comboStatus) {
-                case 0: game.font.setColor(Color.GOLD); break; // All Perfect
-                case 1: game.font.setColor(Color.CYAN); break; // Full Combo
-                default: game.font.setColor(Color.WHITE); break; // Normal
+                case 0: game.font.setColor(Color.GOLD); break; 
+                case 1: game.font.setColor(Color.CYAN); break; 
+                default: game.font.setColor(Color.WHITE); break; 
             }
             
-            // ★修正6: サイズ固定・COMBO文字なし
             game.font.getData().setScale(3.0f); 
             
             String comboText = String.valueOf(judgeSystem.combo);
             float textWidth = comboText.length() * 40f; 
             game.font.draw(game.batch, comboText, CENTER_X - (textWidth / 2), 600);
         }
+        
+        // ★追加: 右下に開発者モードの案内
+        game.font.setColor(Color.GRAY);
+        game.font.getData().setScale(1.5f);
+        game.font.draw(game.batch, "[F1] FORCE FINISH", GameConfig.SCREEN_WIDTH - 300, 50);
         
         game.batch.end();
     }
@@ -464,9 +482,6 @@ public class GameScreen extends ScreenAdapter {
 
     void resumeGame() {
         isPaused = false;
-        
-        // ★修正：いきなり music.play() せず、再開モードに移行
-        // 3秒前からカウントダウン開始
         isResuming = true;
         resumeTimer = 3.0f;
     }
@@ -474,9 +489,10 @@ public class GameScreen extends ScreenAdapter {
     void restartGame() {
         music.setOnCompletionListener(null);
         music.stop(); 
+        
+        // ★修正: リスタート時も正しいResultScreenへ
         music.setOnCompletionListener(m -> {
-            game.setScreen(new ResultScreen(game, (int)judgeSystem.score, judgeSystem.getRank()));
-            dispose();
+            forceFinishGame();
         });
         isPaused = false;
         isPlaying = false;
@@ -485,7 +501,6 @@ public class GameScreen extends ScreenAdapter {
         songPosition = 0;
         isQuitting = false;
         
-        // ★修正7: リスタート時も正しい引数で初期化
         noteManager = new NoteManager(songName, initialBpm);
         this.userOffset = GameConfig.getOffset() + noteManager.offset;
         judgeSystem = new JudgeSystem(noteManager.getMaxCombo());
@@ -553,23 +568,6 @@ public class GameScreen extends ScreenAdapter {
         game.batch.end();
     }
 
-    void updateCountdown(float delta) {
-        countdownTimer += delta;
-        if (countdownTimer < 0) return;
-        if (countIndex < 4) {
-            if (countdownTimer >= countIndex * countInterval) {
-                if (countSound != null) countSound.play();
-                countIndex++;
-            }
-        } else {
-            float startTime = (4 * countInterval) + (2 * beatDuration);
-            if (countdownTimer >= startTime) {
-                music.play();
-                isPlaying = true;
-            }
-        }
-    }
-    
     void drawLanes() {
         Gdx.gl.glEnable(GL20.GL_BLEND);
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
