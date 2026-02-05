@@ -441,8 +441,8 @@ public class GameScreen extends ScreenAdapter {
 
         if (judgeSystem.combo > 0) {
             switch (judgeSystem.comboStatus) {
-                case 0: game.neonFont.setColor(Color.GOLD); break; 
-                case 1: game.neonFont.setColor(Color.CYAN); break; 
+                case 0: game.neonFont.setColor(Color.CYAN); break; 
+                case 1: game.neonFont.setColor(Color.GOLD); break; 
                 default: game.neonFont.setColor(Color.WHITE); break; 
             }
             
