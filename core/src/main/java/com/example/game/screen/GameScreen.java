@@ -451,7 +451,7 @@ public class GameScreen extends ScreenAdapter {
             
             GlyphLayout layout = new GlyphLayout(game.neonFont, comboText);
             float comboX = CENTER_X - layout.width / 2f;
-            float comboY = JUDGEMENT_LINE_Y + 400; // コンボ表示位置 (判定文字より上)
+            float comboY = JUDGEMENT_LINE_Y + 200; // コンボ表示位置 (判定文字より上)
             
             game.neonFont.draw(game.batch, comboText, comboX, comboY);
         }

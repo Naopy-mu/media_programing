@@ -232,7 +232,7 @@ public class SongSelectScreen extends ScreenAdapter {
         
         // ★変更点: layout.height ではなく getCapHeight() を使うことで、
         // 数字のようなベースラインの影響を受けやすい文字を視覚的な中心に配置します。
-        float textY = centerY + 100 + game.neonFont.getCapHeight() / 2f; 
+        float textY = centerY + 25 + game.neonFont.getCapHeight() / 2f; 
         
         game.neonFont.draw(game.batch, difText, textX, textY);
     }
@@ -280,7 +280,7 @@ public class SongSelectScreen extends ScreenAdapter {
             
             // ★変更点: 垂直方向もCapHeightを使用して、フォントの「サイズ感」によるズレを解消
             // itemY はパネルの垂直中心なので、そこからCapHeightの半分を足す
-            float textY = itemY + (game.neonFont.getCapHeight() / 2f); 
+            float textY = itemY + 15 + (game.neonFont.getCapHeight() / 2f); 
             
             game.neonFont.draw(game.batch, songText, textX, textY);
         }
