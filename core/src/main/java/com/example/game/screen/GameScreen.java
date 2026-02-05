@@ -8,6 +8,7 @@ import com.badlogic.gdx.audio.Sound;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.utils.ObjectMap;
 import com.badlogic.gdx.utils.ScreenUtils;
@@ -35,7 +36,6 @@ public class GameScreen extends ScreenAdapter {
 
     float songPosition = 0;
 
-    // 3D設定
     final float VANISHING_POINT_Y = 1000;
     final float JUDGEMENT_LINE_Y = 150;
     final float LANE_BOTTOM_Y = 50f;
@@ -66,7 +66,6 @@ public class GameScreen extends ScreenAdapter {
     final float FADE_SPEED = 0.8f;
 
     private boolean isQuitting = false;
-
     boolean isResuming = false;
     float resumeTimer = 0;
 
@@ -94,20 +93,16 @@ public class GameScreen extends ScreenAdapter {
         this.userOffset = GameConfig.getOffset() + noteManager.offset;
 
         judgeSystem = new JudgeSystem(noteManager.getMaxCombo());
-        
         effectManager = new EffectManager();
 
         this.beatDuration = 60f / initialBpm;
         this.countInterval = this.beatDuration; 
-        
         this.introDuration = (4 * countInterval) + (2 * beatDuration);
 
         music = Gdx.audio.newMusic(Gdx.files.internal(songName + ".mp3"));
         music.setVolume(0.3f);
         
-        music.setOnCompletionListener(m -> {
-            forceFinishGame();
-        });
+        music.setOnCompletionListener(m -> forceFinishGame());
         
         try { hitSound = Gdx.audio.newSound(Gdx.files.internal("hit.mp3")); } catch (Exception e) {}
         try { countSound = Gdx.audio.newSound(Gdx.files.internal("count.mp3")); } catch (Exception e) {}
@@ -116,7 +111,6 @@ public class GameScreen extends ScreenAdapter {
         countdownTimer = -0.5f;
         countIndex = 0;
         isQuitting = false;
-        
         songPosition = -introDuration;
     }
 
@@ -147,31 +141,22 @@ public class GameScreen extends ScreenAdapter {
             if (isPlaying || songPosition > -0.5f) {
                 noteManager.checkMiss(songPosition - userOffset, judgeSystem);
                 updateHolds(delta);
-
                 for (int i = 0; i < GameConfig.LANE_COUNT; i++) {
-                    if (Gdx.input.isKeyJustPressed(GameConfig.KEY_MAPPING[i])) {
-                        processHit(i);
-                    }
+                    if (Gdx.input.isKeyJustPressed(GameConfig.KEY_MAPPING[i])) processHit(i);
                 }
             }
-            
-            if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
-                pauseGame();
-            }
+            if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) pauseGame();
         }
 
-        // --- 描画処理 ---
         drawLanes();
-        drawBeatLines(); // ★追加: 拍線の描画 (ノーツより奥、レーンより手前)
+        drawBeatLines(); 
         drawEffects();    
         drawHoldBodies(); 
         drawSyncLines();  
         drawNotes();      
         drawUI();         
 
-        if (isPaused) {
-            drawPauseMenu();
-        }
+        if (isPaused) drawPauseMenu();
 
         if (isFadingIn) {
             fadeInAlpha -= delta * FADE_SPEED;
@@ -194,9 +179,10 @@ public class GameScreen extends ScreenAdapter {
             music.setOnCompletionListener(null);
             music.stop();
         }
-        
+        // ★修正: songName を渡す
         game.setScreen(new ResultScreen(
             game, 
+            songName, // 曲名
             (int)judgeSystem.score, 
             judgeSystem.maxCombo, 
             judgeSystem.perfectCount, 
@@ -207,57 +193,35 @@ public class GameScreen extends ScreenAdapter {
         dispose();
     }
 
-    // ★追加: 拍線を描画するメソッド
+    // --- 以下、描画・ロジックメソッド（変更なし） ---
     void drawBeatLines() {
         Gdx.gl.glEnable(GL20.GL_BLEND);
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
-        
         shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
-        // 薄いグレーの線 (RGB: 0.7, Alpha: 0.3)
         shapeRenderer.setColor(0.7f, 0.7f, 0.7f, 0.3f); 
-
         float currentTime = songPosition - userOffset;
         final float MAX_DRAW_Z = 10.0f;
-        // 画面奥（Z=10.0）までの時間幅を計算
         float visibleTimeRange = MAX_DRAW_Z / scrollSpeed;
         float maxVisibleTime = currentTime + visibleTimeRange;
-
-        // BPMイベントごとに区切って拍を計算
         for (int i = 0; i < noteManager.bpmEvents.size; i++) {
             BpmEvent e = noteManager.bpmEvents.get(i);
-            float nextEventTime = (i + 1 < noteManager.bpmEvents.size) 
-                                  ? noteManager.bpmEvents.get(i+1).time 
-                                  : Float.MAX_VALUE;
-
-            // 画面範囲外のBPMイベントはスキップ
+            float nextEventTime = (i + 1 < noteManager.bpmEvents.size) ? noteManager.bpmEvents.get(i+1).time : Float.MAX_VALUE;
             if (e.time > maxVisibleTime) break;
             if (nextEventTime < currentTime) continue;
-
             float beatDuration = 60f / e.bpm;
             float t = e.time;
-
-            // 現在時刻より前の拍はループで飛ばす（描画負荷軽減）
-            // "currentTime" の少し前から計算しないと、手前のラインが消えるので -beatDuration
             if (t < currentTime - beatDuration) {
                 float diff = (currentTime - beatDuration) - t;
                 long skippedBeats = (long)(diff / beatDuration);
                 t += skippedBeats * beatDuration;
             }
-
-            // 次のBPM変更点まで、または画面奥までループ
             while (t < nextEventTime && t <= maxVisibleTime + beatDuration) {
                 float zDistance = (t - currentTime) * scrollSpeed;
-
-                // 描画範囲内なら線を引く
-                // 手前すぎず(-0.5)、奥すぎない(MAX_DRAW_Z)
                 if (zDistance > -0.5f && zDistance <= MAX_DRAW_Z) {
                     float scale = getScale(zDistance);
                     float y = getScreenY(scale);
-                    
-                    // レーンの左端から右端まで線を引く
                     float x1 = getLaneCenterX(0, scale) - getLaneWidth(scale)/2;
                     float x2 = getLaneCenterX(GameConfig.LANE_COUNT-1, scale) + getLaneWidth(scale)/2;
-                    
                     shapeRenderer.line(x1, y, x2, y);
                 }
                 t += beatDuration;
@@ -270,7 +234,6 @@ public class GameScreen extends ScreenAdapter {
     void updateCountdown(float delta) {
         countdownTimer += delta;
         if (countdownTimer < 0) return;
-
         if (countIndex < 4) {
             if (countdownTimer >= countIndex * countInterval) {
                 if (countSound != null) countSound.play();
@@ -288,25 +251,19 @@ public class GameScreen extends ScreenAdapter {
         int prevCeil = (int)Math.ceil(resumeTimer);
         resumeTimer -= delta;
         int currentCeil = (int)Math.ceil(resumeTimer);
-
         if (currentCeil < prevCeil && currentCeil > 0) {
             if (countSound != null) countSound.play();
         }
-
         if (resumeTimer <= 0) {
             isResuming = false;
-            if (isPlaying) {
-                music.play();
-            }
+            if (isPlaying) music.play();
         }
     }
 
     void updateHolds(float delta) {
         float currentDisplayTime = songPosition - userOffset;
-
         for (Note note : noteManager.notes) {
             if (!note.isHold || !note.active) continue;
-
             if (note.isHolding) {
                 if (currentDisplayTime >= note.endTime) {
                     note.isHolding = false;
@@ -317,16 +274,12 @@ public class GameScreen extends ScreenAdapter {
                         note.holdTimer += delta;
                         float currentBpm = noteManager.getBpmAt(currentDisplayTime);
                         float currentBeatDuration = 60f / currentBpm;
-
                         if (note.holdTimer >= currentBeatDuration) {
                             judgeSystem.addHoldCombo();
                             note.holdTimer -= currentBeatDuration; 
                         }
-
                         float scale = getScale(0);
-                        if (Math.random() < 0.3) {
-                            effectManager.spawn(getLaneCenterX(note.lane, scale), JUDGEMENT_LINE_Y, getLaneWidth(scale), Color.CYAN);
-                        }
+                        if (Math.random() < 0.3) effectManager.spawn(getLaneCenterX(note.lane, scale), JUDGEMENT_LINE_Y, getLaneWidth(scale), Color.CYAN);
                     } else {
                         note.isHolding = false;
                         note.holdTimer = 0f;
@@ -341,13 +294,11 @@ public class GameScreen extends ScreenAdapter {
         for (Note note : noteManager.notes) {
             if (note.lane != lane || !note.active) continue;
             if (note.isHold && note.isHolding) continue;
-
             Color resultColor = judgeSystem.checkHit(note.targetTime + userOffset, songPosition);
             if (resultColor != null) {
                 if (hitSound != null) hitSound.play();
                 float scale = getScale(0);
                 effectManager.spawn(getLaneCenterX(lane, scale), JUDGEMENT_LINE_Y, getLaneWidth(scale), resultColor);
-
                 if (note.isHold) {
                     note.isHolding = true;
                     note.holdTimer = 0f; 
@@ -363,36 +314,23 @@ public class GameScreen extends ScreenAdapter {
         Gdx.gl.glEnable(GL20.GL_BLEND);
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
-
         float currentDisplayTime = songPosition - userOffset;
         final float MAX_DRAW_Z = 10.0f; 
-
         for (Note note : noteManager.notes) {
             if (note.active && note.isHold) {
                 float startZ;
-                if (note.isHolding) startZ = 0;
-                else startZ = (note.targetTime - currentDisplayTime) * scrollSpeed;
-
+                if (note.isHolding) startZ = 0; else startZ = (note.targetTime - currentDisplayTime) * scrollSpeed;
                 float endZ = (note.endTime - currentDisplayTime) * scrollSpeed;
-
                 if (endZ < 0 || startZ > MAX_DRAW_Z) continue;
-                if (startZ < 0) startZ = 0;
-                if (endZ > MAX_DRAW_Z) endZ = MAX_DRAW_Z;
-
-                float scaleStart = getScale(startZ);
-                float scaleEnd = getScale(endZ);
-
+                if (startZ < 0) startZ = 0; if (endZ > MAX_DRAW_Z) endZ = MAX_DRAW_Z;
+                float scaleStart = getScale(startZ); float scaleEnd = getScale(endZ);
                 float x1 = getLaneCenterX(note.lane, scaleStart) - getLaneWidth(scaleStart)/2;
                 float x2 = getLaneCenterX(note.lane, scaleStart) + getLaneWidth(scaleStart)/2;
                 float y1 = getScreenY(scaleStart);
-
                 float x3 = getLaneCenterX(note.lane, scaleEnd) + getLaneWidth(scaleEnd)/2;
                 float x4 = getLaneCenterX(note.lane, scaleEnd) - getLaneWidth(scaleEnd)/2;
                 float y2 = getScreenY(scaleEnd);   
-                
-                if (note.isHolding) shapeRenderer.setColor(0f, 1f, 1f, 0.6f);
-                else shapeRenderer.setColor(0f, 0.5f, 0.5f, 0.4f);
-
+                if (note.isHolding) shapeRenderer.setColor(0f, 1f, 1f, 0.6f); else shapeRenderer.setColor(0f, 0.5f, 0.5f, 0.4f);
                 shapeRenderer.triangle(x1, y1, x2, y1, x3, y2);
                 shapeRenderer.triangle(x1, y1, x3, y2, x4, y2);
             }
@@ -406,29 +344,21 @@ public class GameScreen extends ScreenAdapter {
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
         shapeRenderer.setColor(1f, 1f, 1f, 0.5f);
-
         float currentDisplayTime = songPosition - userOffset;
         float maxDrawZ = 10.0f;
-
         for (int i = 0; i < noteManager.notes.size - 1; i++) {
             Note currentNote = noteManager.notes.get(i);
             Note nextNote = noteManager.notes.get(i + 1);
-
             if (!currentNote.active || !nextNote.active) continue;
-
             if (Math.abs(currentNote.targetTime - nextNote.targetTime) < 0.001f) {
                 float timeRemains = currentNote.targetTime - currentDisplayTime;
                 float zDistance = timeRemains * scrollSpeed;
-
                 if (zDistance < 0 || zDistance > maxDrawZ) continue;
-
                 float scale = getScale(zDistance);
                 float drawY = getScreenY(scale);
                 float lineHeight = 5.0f * scale; 
-
                 float x1 = getLaneCenterX(currentNote.lane, scale);
                 float x2 = getLaneCenterX(nextNote.lane, scale);
-
                 shapeRenderer.rectLine(x1, drawY, x2, drawY, lineHeight);
             }
         }
@@ -439,26 +369,19 @@ public class GameScreen extends ScreenAdapter {
     void drawNotes() {
         game.batch.begin();
         game.batch.setColor(Color.WHITE);
-
         for (Note note : noteManager.notes) {
             if (note.active) {
                 if (note.isHolding) continue;
-
                 float timeRemains = (note.targetTime + userOffset) - songPosition;
                 float zDistance = timeRemains * scrollSpeed;
-                
                 if (zDistance < -0.2f || zDistance > 10.0f) continue;
-
                 float scale = getScale(zDistance);
                 float drawY = getScreenY(scale);
                 float drawH = 40f * scale; 
-
                 if (drawY + drawH < LANE_BOTTOM_Y) continue;
-
                 float laneWidth = getLaneWidth(scale);
                 float drawW = laneWidth * 1.0f;
                 float drawX = getLaneCenterX(note.lane, scale);
-
                 game.batch.draw(noteImg, drawX - drawW/2, drawY, drawW, drawH);
             }
         }
@@ -481,9 +404,7 @@ public class GameScreen extends ScreenAdapter {
             game.font.setColor(Color.CYAN);
             game.font.getData().setScale(5.0f); 
             int count = (int)Math.ceil(resumeTimer);
-            if (count > 0) {
-                game.font.draw(game.batch, String.valueOf(count), CENTER_X - 20, 600);
-            }
+            if (count > 0) game.font.draw(game.batch, String.valueOf(count), CENTER_X - 20, 600);
         }
 
         if (judgeSystem.messageTimer > 0) {
@@ -520,15 +441,19 @@ public class GameScreen extends ScreenAdapter {
 
         if (judgeSystem.combo > 0) {
             switch (judgeSystem.comboStatus) {
-                case 0: game.font.setColor(Color.GOLD); break; 
-                case 1: game.font.setColor(Color.CYAN); break; 
-                default: game.font.setColor(Color.WHITE); break; 
+                case 0: game.neonFont.setColor(Color.GOLD); break; 
+                case 1: game.neonFont.setColor(Color.CYAN); break; 
+                default: game.neonFont.setColor(Color.WHITE); break; 
             }
             
-            game.font.getData().setScale(3.0f); 
+            game.neonFont.getData().setScale(0.5f); 
             String comboText = String.valueOf(judgeSystem.combo);
-            float textWidth = comboText.length() * 40f; 
-            game.font.draw(game.batch, comboText, CENTER_X - (textWidth / 2), 600);
+            
+            GlyphLayout layout = new GlyphLayout(game.neonFont, comboText);
+            float comboX = CENTER_X - layout.width / 2f;
+            float comboY = JUDGEMENT_LINE_Y + 400; // コンボ表示位置 (判定文字より上)
+            
+            game.neonFont.draw(game.batch, comboText, comboX, comboY);
         }
         
         game.font.setColor(Color.GRAY);
@@ -538,25 +463,13 @@ public class GameScreen extends ScreenAdapter {
         game.batch.end();
     }
 
-    void pauseGame() {
-        isPaused = true;
-        if (music.isPlaying()) music.pause(); 
-        pauseIndex = 0; 
-    }
-
-    void resumeGame() {
-        isPaused = false;
-        isResuming = true;
-        resumeTimer = 3.0f;
-    }
-
+    void pauseGame() { isPaused = true; if (music.isPlaying()) music.pause(); pauseIndex = 0; }
+    void resumeGame() { isPaused = false; isResuming = true; resumeTimer = 3.0f; }
+    
     void restartGame() {
         music.setOnCompletionListener(null);
         music.stop(); 
-        
-        music.setOnCompletionListener(m -> {
-            forceFinishGame();
-        });
+        music.setOnCompletionListener(m -> forceFinishGame());
         isPaused = false;
         isPlaying = false;
         countdownTimer = -0.5f; 
@@ -567,9 +480,7 @@ public class GameScreen extends ScreenAdapter {
         noteManager = new NoteManager(songName, initialBpm);
         this.userOffset = GameConfig.getOffset() + noteManager.offset;
         judgeSystem = new JudgeSystem(noteManager.getMaxCombo());
-        
         effectManager = new EffectManager();
-        
         songPosition = -introDuration;
     }
 
@@ -587,20 +498,10 @@ public class GameScreen extends ScreenAdapter {
     }
 
     void handlePauseInput() {
-        if (Gdx.input.isKeyJustPressed(Input.Keys.UP)) {
-            pauseIndex--;
-            if (pauseIndex < 0) pauseIndex = pauseItems.length - 1;
-        }
-        if (Gdx.input.isKeyJustPressed(Input.Keys.DOWN)) {
-            pauseIndex++;
-            if (pauseIndex >= pauseItems.length) pauseIndex = 0;
-        }
+        if (Gdx.input.isKeyJustPressed(Input.Keys.UP)) { pauseIndex--; if (pauseIndex < 0) pauseIndex = pauseItems.length - 1; }
+        if (Gdx.input.isKeyJustPressed(Input.Keys.DOWN)) { pauseIndex++; if (pauseIndex >= pauseItems.length) pauseIndex = 0; }
         if (Gdx.input.isKeyJustPressed(Input.Keys.SPACE) || Gdx.input.isKeyJustPressed(Input.Keys.ENTER)) {
-            switch (pauseIndex) {
-                case 0: resumeGame(); break;
-                case 1: restartGame(); break;
-                case 2: returnToSongSelect(); break;
-            }
+            switch (pauseIndex) { case 0: resumeGame(); break; case 1: restartGame(); break; case 2: returnToSongSelect(); break; }
         }
         if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) resumeGame();
     }
@@ -613,7 +514,6 @@ public class GameScreen extends ScreenAdapter {
         shapeRenderer.rect(0, 0, GameConfig.SCREEN_WIDTH, GameConfig.SCREEN_HEIGHT);
         shapeRenderer.end();
         Gdx.gl.glDisable(GL20.GL_BLEND);
-
         game.batch.begin();
         game.font.setColor(Color.CYAN);
         game.font.getData().setScale(4.0f);
@@ -633,7 +533,7 @@ public class GameScreen extends ScreenAdapter {
         game.batch.end();
     }
 
-    void drawLanes() {
+    void drawLanes() { /* (省略: 変更なし) */ 
         Gdx.gl.glEnable(GL20.GL_BLEND);
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
@@ -675,7 +575,7 @@ public class GameScreen extends ScreenAdapter {
         Gdx.gl.glDisable(GL20.GL_BLEND);
     }
 
-    void drawEffects() {
+    void drawEffects() { /* (省略: 変更なし) */
         Gdx.gl.glEnable(GL20.GL_BLEND);
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE);
         shapeRenderer.begin(ShapeRenderer.ShapeType.Line);

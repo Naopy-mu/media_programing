@@ -6,12 +6,13 @@ import com.badlogic.gdx.ScreenAdapter;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.math.Interpolation;
-import com.badlogic.gdx.math.MathUtils; // 必要ならimport
+import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.example.game.GameConfig;
 import com.example.game.Main;
 
 public class ResultScreen extends ScreenAdapter {
     final Main game;
+    String songName;
     
     int score;
     int maxCombo;
@@ -22,9 +23,9 @@ public class ResultScreen extends ScreenAdapter {
     float timeElapsed = 0;
     int displayScore = 0;
 
-    // コンストラクタ：詳細データを受け取る
-    public ResultScreen(Main game, int score, int maxCombo, int perfect, int great, int good, int miss) {
+    public ResultScreen(Main game, String songName, int score, int maxCombo, int perfect, int great, int good, int miss) {
         this.game = game;
+        this.songName = songName;
         this.score = score;
         this.maxCombo = maxCombo;
         this.perfect = perfect;
@@ -55,75 +56,86 @@ public class ResultScreen extends ScreenAdapter {
 
         game.batch.begin();
 
-        // TITLE
-        game.font.setColor(Color.WHITE);
-        game.font.getData().setScale(3.0f);
-        drawCenteredText("RESULT", 750);
+        // --- TITLE ---
+        game.neonFont.setColor(Color.WHITE);
+        game.neonFont.getData().setScale(0.5f);
+        drawCenteredText("RESULT", 950);
 
-        // RANK (2秒後に表示)
-        if (timeElapsed > 2.0f) {
-            game.font.setColor(rankColor);
-            game.font.getData().setScale(12.0f);
-            drawCenteredText(rank, 550);
+        // --- RANK (左側) ---
+        // ★修正: サイズを2.0 -> 1.5へ縮小、位置を650 -> 800へ上昇（下の統計と被らないように）
+        if (timeElapsed > 0.5f) {
+            game.neonFont.setColor(rankColor);
+            game.neonFont.getData().setScale(1.5f); 
+            // 位置調整: 少し左に寄せつつ上に配置
+            game.neonFont.draw(game.batch, rank, 350, 800);
         }
 
-        // SCORE
-        game.font.setColor(Color.WHITE);
-        game.font.getData().setScale(5.0f);
-        drawCenteredText(String.format("SCORE: %,d", displayScore), 350);
+        // --- SCORE (右側) ---
+        // ★修正: サイズを0.7 -> 0.55へ縮小
+        game.neonFont.setColor(Color.WHITE);
+        game.neonFont.getData().setScale(0.4f);
+        game.neonFont.draw(game.batch, "SCORE", 1000, 750); // ラベル位置も少し調整
+        
+        game.neonFont.getData().setScale(0.55f); 
+        game.neonFont.draw(game.batch, String.format("%,d", displayScore), 1000, 670);
 
-        // STATS
+        // --- STATS (下部) ---
         drawDetailStats(GameConfig.SCREEN_WIDTH / 2f);
 
-        // GUIDE
+        // --- GUIDE ---
         if (timeElapsed > 3.0f) {
-            game.font.setColor(Color.LIGHT_GRAY);
-            game.font.getData().setScale(1.5f);
-            drawCenteredText("Press [SPACE] to Return", 50);
+            game.neonFont.setColor(Color.LIGHT_GRAY);
+            game.neonFont.getData().setScale(0.25f);
+            drawCenteredText("[SPACE] SONG SELECT    [R] RETRY", 100);
         }
 
         game.batch.end();
 
-        if (timeElapsed > 3.0f) {
+        // --- INPUT ---
+        if (timeElapsed > 1.0f) {
             if (Gdx.input.isKeyJustPressed(Input.Keys.SPACE) || Gdx.input.isKeyJustPressed(Input.Keys.ENTER)) {
                 game.setScreen(new SongSelectScreen(game));
                 dispose();
+            }
+            if (Gdx.input.isKeyJustPressed(Input.Keys.R)) {
+                 game.setScreen(new GameScreen(game, songName));
+                 dispose();
             }
         }
     }
 
     private void drawDetailStats(float centerX) {
-        float startY = 250;
-        float lineHeight = 40;
+        float startY = 450; // ★修正: 全体的に少し上に配置
+        float lineHeight = 55; 
         float labelX = centerX - 200;
-        float valueX = centerX + 50;
+        float valueX = centerX + 300;
 
-        game.font.getData().setScale(2.0f);
+        game.neonFont.getData().setScale(0.25f);
 
-        game.font.setColor(Color.YELLOW);
-        game.font.draw(game.batch, "MAX COMBO", labelX, startY);
-        game.font.draw(game.batch, String.valueOf(maxCombo), valueX, startY);
+        game.neonFont.setColor(Color.YELLOW);
+        game.neonFont.draw(game.batch, "MAX COMBO", labelX, startY);
+        game.neonFont.draw(game.batch, String.valueOf(maxCombo), valueX, startY);
 
-        game.font.setColor(Color.CYAN);
-        game.font.draw(game.batch, "PERFECT", labelX, startY - lineHeight * 1.5f);
-        game.font.draw(game.batch, String.valueOf(perfect), valueX, startY - lineHeight * 1.5f);
+        game.neonFont.setColor(Color.CYAN);
+        game.neonFont.draw(game.batch, "PERFECT", labelX, startY - lineHeight);
+        game.neonFont.draw(game.batch, String.valueOf(perfect), valueX, startY - lineHeight);
 
-        game.font.setColor(Color.GREEN);
-        game.font.draw(game.batch, "GREAT", labelX, startY - lineHeight * 2.5f);
-        game.font.draw(game.batch, String.valueOf(great), valueX, startY - lineHeight * 2.5f);
+        game.neonFont.setColor(Color.GREEN);
+        game.neonFont.draw(game.batch, "GREAT", labelX, startY - lineHeight * 2);
+        game.neonFont.draw(game.batch, String.valueOf(great), valueX, startY - lineHeight * 2);
         
-        game.font.setColor(Color.YELLOW);
-        game.font.draw(game.batch, "GOOD", labelX, startY - lineHeight * 3.5f);
-        game.font.draw(game.batch, String.valueOf(good), valueX, startY - lineHeight * 3.5f);
+        game.neonFont.setColor(Color.YELLOW);
+        game.neonFont.draw(game.batch, "GOOD", labelX, startY - lineHeight * 3);
+        game.neonFont.draw(game.batch, String.valueOf(good), valueX, startY - lineHeight * 3);
 
-        game.font.setColor(Color.RED);
-        game.font.draw(game.batch, "MISS", labelX, startY - lineHeight * 4.5f);
-        game.font.draw(game.batch, String.valueOf(miss), valueX, startY - lineHeight * 4.5f);
+        game.neonFont.setColor(Color.RED);
+        game.neonFont.draw(game.batch, "MISS", labelX, startY - lineHeight * 4);
+        game.neonFont.draw(game.batch, String.valueOf(miss), valueX, startY - lineHeight * 4);
     }
 
     private void drawCenteredText(String text, float y) {
-        var layout = new com.badlogic.gdx.graphics.g2d.GlyphLayout(game.font, text);
+        var layout = new GlyphLayout(game.neonFont, text);
         float x = (GameConfig.SCREEN_WIDTH - layout.width) / 2f;
-        game.font.draw(game.batch, text, x, y);
+        game.neonFont.draw(game.batch, text, x, y);
     }
 }
