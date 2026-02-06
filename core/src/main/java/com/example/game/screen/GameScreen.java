@@ -131,7 +131,7 @@ public class GameScreen extends ScreenAdapter {
         if (backgroundTexture != null) {
             game.batch.begin();
             // かなり暗く(0.3)、透明度も高く(0.4)設定して、プレイの邪魔にならないようにする
-            game.batch.setColor(0.3f, 0.3f, 0.3f, 0.4f);
+            game.batch.setColor(0.6f, 0.6f, 0.6f, 0.5f);
             game.batch.draw(backgroundTexture, 0, 0, GameConfig.SCREEN_WIDTH, GameConfig.SCREEN_HEIGHT);
             game.batch.end();
         }
@@ -627,6 +627,7 @@ public class GameScreen extends ScreenAdapter {
         try {
             if (shapeRenderer != null) shapeRenderer.dispose();
             if (noteImg != null) noteImg.dispose();
+            if (backgroundTexture != null) backgroundTexture.dispose();
         } catch (Exception e) { }
         try {
             if (hitSound != null) hitSound.dispose();
