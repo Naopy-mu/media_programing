@@ -24,6 +24,7 @@ public class ResultScreen extends ScreenAdapter {
     int displayScore = 0;
 
     public ResultScreen(Main game, String songName, int score, int maxCombo, int perfect, int great, int good, int miss) {
+        // コンストラクタ
         this.game = game;
         this.songName = songName;
         this.score = score;
@@ -37,6 +38,7 @@ public class ResultScreen extends ScreenAdapter {
     }
 
     private void calculateRank() {
+        // ランク計算
         if (score >= 980000) { rank = "S+"; rankColor = Color.CYAN; }
         else if (score >= 950000) { rank = "S"; rankColor = Color.GOLD; }
         else if (score >= 900000) { rank = "A"; rankColor = Color.GREEN; }
@@ -47,6 +49,7 @@ public class ResultScreen extends ScreenAdapter {
 
     @Override
     public void render(float delta) {
+        // 背景クリア
         Gdx.gl.glClearColor(0.1f, 0.1f, 0.2f, 1);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
@@ -56,33 +59,30 @@ public class ResultScreen extends ScreenAdapter {
 
         game.batch.begin();
 
-        // --- TITLE ---
+        // タイトル
         game.neonFont.setColor(Color.WHITE);
         game.neonFont.getData().setScale(0.5f);
         drawCenteredText("RESULT", 950);
 
-        // --- RANK (左側) ---
-        // ★修正: サイズを2.0 -> 1.5へ縮小、位置を650 -> 800へ上昇（下の統計と被らないように）
+        // ランク
         if (timeElapsed > 0.5f) {
             game.neonFont.setColor(rankColor);
             game.neonFont.getData().setScale(1.5f); 
-            // 位置調整: 少し左に寄せつつ上に配置
             game.neonFont.draw(game.batch, rank, 350, 800);
         }
 
-        // --- SCORE (右側) ---
-        // ★修正: サイズを0.7 -> 0.55へ縮小
+        // スコア表示
         game.neonFont.setColor(Color.WHITE);
         game.neonFont.getData().setScale(0.4f);
-        game.neonFont.draw(game.batch, "SCORE", 1000, 750); // ラベル位置も少し調整
+        game.neonFont.draw(game.batch, "SCORE", 1000, 750);
         
         game.neonFont.getData().setScale(0.55f); 
         game.neonFont.draw(game.batch, String.format("%,d", displayScore), 1000, 670);
 
-        // --- STATS (下部) ---
+        // 詳細ステータス表示
         drawDetailStats(GameConfig.SCREEN_WIDTH / 2f);
 
-        // --- GUIDE ---
+        // 操作ガイド
         if (timeElapsed > 3.0f) {
             game.neonFont.setColor(Color.LIGHT_GRAY);
             game.neonFont.getData().setScale(0.25f);
@@ -91,13 +91,16 @@ public class ResultScreen extends ScreenAdapter {
 
         game.batch.end();
 
-        // --- INPUT ---
+        // 入力処理
         if (timeElapsed > 1.0f) {
+            // 曲選択へ戻るまたはリトライ
             if (Gdx.input.isKeyJustPressed(Input.Keys.SPACE) || Gdx.input.isKeyJustPressed(Input.Keys.ENTER)) {
+                // 曲選択画面へ戻る
                 game.setScreen(new SongSelectScreen(game));
                 dispose();
             }
             if (Gdx.input.isKeyJustPressed(Input.Keys.R)) {
+                // リトライ
                  game.setScreen(new GameScreen(game, songName));
                  dispose();
             }
@@ -105,7 +108,8 @@ public class ResultScreen extends ScreenAdapter {
     }
 
     private void drawDetailStats(float centerX) {
-        float startY = 450; // ★修正: 全体的に少し上に配置
+        // 詳細ステータス描画
+        float startY = 450;
         float lineHeight = 55; 
         float labelX = centerX - 200;
         float valueX = centerX + 300;
@@ -134,6 +138,7 @@ public class ResultScreen extends ScreenAdapter {
     }
 
     private void drawCenteredText(String text, float y) {
+        // 中央揃えテキスト描画
         var layout = new GlyphLayout(game.neonFont, text);
         float x = (GameConfig.SCREEN_WIDTH - layout.width) / 2f;
         game.neonFont.draw(game.batch, text, x, y);

@@ -26,37 +26,44 @@ public class SongSelectScreen extends ScreenAdapter {
     float currentScroll = 0;
     Texture panelImg;
 
-    // ★追加: ジャケット画像管理用マップ
+    // 各曲のジャケット画像を保持するマップ
     ObjectMap<String, Texture> jackets = new ObjectMap<>();
 
+    // ループ背景アニメーション
     Animation<Texture> loopAnimation;
     Array<Texture> loopTextures;
     final int TOTAL_LOOP_FRAMES = 192; 
     final String LOOP_PATH = "tunnel/%05d.png"; 
 
+    // 移動アニメーション
     Animation<Texture> moveAnimation;
     Array<Texture> moveTextures;
     final int TOTAL_MOVE_FRAMES = 192; 
     final String MOVE_PATH = "tunnel_move/%05d.png"; 
 
+    // アニメーション制御用
     float animationTime = 0; 
     float moveAnimTime = 0;
 
+    // 描画用
     ShapeRenderer shapeRenderer;
     final float ANIM_DISPLAY_SIZE = 800f;
     final float BROWSING_CENTER_X = 500f;
     float currentAnimX;
     float fadeAlpha = 0f;       
 
+    // 音楽プレビュー用
     Music previewMusic;
     String currentPlayingSong = "";
 
+    // 画面状態管理
     enum State { BROWSING, MOVING_CENTER, PLAYING_INTRO }
     State currentState = State.BROWSING;
     float uiAlpha = 1.0f;
     boolean assetsDisposed = false;
 
     public SongSelectScreen(Main game) {
+        // コンストラクタ
         this.game = game;
         
         if (game.assetManager.isLoaded("song-select-UI.png")) {
@@ -65,7 +72,7 @@ public class SongSelectScreen extends ScreenAdapter {
             panelImg = new Texture("song-select-UI.png");
         }
 
-        // ★追加: ジャケット画像の読み込み
+        // ジャケット画像の読み込み
         for (String songName : songs) {
             try {
                 Texture tex = new Texture(Gdx.files.internal(songName + ".png"));
@@ -83,6 +90,7 @@ public class SongSelectScreen extends ScreenAdapter {
         // アニメーション読み込み
         loopTextures = new Array<>();
         for (int i = 1; i <= TOTAL_LOOP_FRAMES; i++) { 
+            // ループアニメーション画像読み込み
             String path = String.format(LOOP_PATH, i);
             if (game.assetManager.isLoaded(path)) loopTextures.add(game.assetManager.get(path, Texture.class));
             else loopTextures.add(new Texture(Gdx.files.internal(path)));
@@ -91,6 +99,7 @@ public class SongSelectScreen extends ScreenAdapter {
 
         moveTextures = new Array<>();
         for (int i = 1; i <= TOTAL_MOVE_FRAMES; i++) { 
+            // 移動アニメーション画像読み込み
             String path = String.format(MOVE_PATH, i);
             if (game.assetManager.isLoaded(path)) moveTextures.add(game.assetManager.get(path, Texture.class));
             else moveTextures.add(new Texture(Gdx.files.internal(path)));
@@ -101,6 +110,7 @@ public class SongSelectScreen extends ScreenAdapter {
     }
 
     void playPreview(String songName) {
+        // プレビュー音楽再生
         if (songName.equals(currentPlayingSong)) return;
         if (previewMusic != null) { previewMusic.stop(); previewMusic.dispose(); }
         try {
@@ -114,6 +124,7 @@ public class SongSelectScreen extends ScreenAdapter {
 
     @Override
     public void render(float delta) {
+        // 背景クリア
         if (assetsDisposed) {
             Gdx.gl.glClearColor(1, 1, 1, 1);
             Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
@@ -123,21 +134,23 @@ public class SongSelectScreen extends ScreenAdapter {
         
         updateLogic(delta);
 
-        // ★修正: 背景ジャケット描画
+        // 背景ジャケット描画
         game.batch.begin();
         Texture currentJacket = jackets.get(songs[selectedIndex]);
         if (currentJacket != null) {
-            // 少し暗く(0.6)、少し透明に(0.8)して描画することで、擬似的なブラー効果とUIの引き立てを行う
+            // ジャケット画像がある場合は背景に描画
             game.batch.setColor(0.6f, 0.6f, 0.6f, 0.8f * uiAlpha);
             game.batch.draw(currentJacket, 0, 0, GameConfig.SCREEN_WIDTH, GameConfig.SCREEN_HEIGHT);
         }
         game.batch.end();
-        
+
         drawCircularAnimation();
 
         if (currentState != State.PLAYING_INTRO) {
+            // UI描画
             game.batch.begin();
             if (uiAlpha > 0.01f) {
+                // UI要素描画
                 drawCirclesAndSpectrum(delta);
                 drawSongList(delta);
                 drawUI(delta);
@@ -146,6 +159,7 @@ public class SongSelectScreen extends ScreenAdapter {
         }
 
         if (fadeAlpha > 0) {
+            // フェード描画
             Gdx.gl.glEnable(GL20.GL_BLEND);
             Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
             shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
@@ -157,7 +171,9 @@ public class SongSelectScreen extends ScreenAdapter {
     }
 
     void drawCircularAnimation() {
+        // 円形マスクアニメーション描画
         if (currentState == State.PLAYING_INTRO) {
+            // 移動アニメーション描画
             Texture moveFrame = null;
             if (moveAnimation != null) moveFrame = moveAnimation.getKeyFrame(moveAnimTime, false);
             if (moveFrame != null) {
@@ -198,6 +214,7 @@ public class SongSelectScreen extends ScreenAdapter {
     }
 
     void updateLogic(float delta) {
+        // 画面ロジック更新
         if (assetsDisposed) return; 
         if (Gdx.input.isKeyJustPressed(Input.Keys.F1)) {
             if (previewMusic != null) previewMusic.stop();
@@ -212,6 +229,7 @@ public class SongSelectScreen extends ScreenAdapter {
 
         animationTime += delta;
         switch (currentState) {
+            // 曲選択中
             case BROWSING:
                 handleInput();
                 currentScroll = MathUtils.lerp(currentScroll, (float)selectedIndex, 0.1f);
@@ -245,8 +263,9 @@ public class SongSelectScreen extends ScreenAdapter {
         }
     }
 
-    // ★修正: 難易度を円の中心に (微調整)
+    // 難易度を円の中心に (微調整)
     void drawCirclesAndSpectrum(float delta) {
+        // 難易度表示
         float centerX = BROWSING_CENTER_X; 
         float centerY = GameConfig.SCREEN_HEIGHT / 2f;
         String difText = String.valueOf(difficulties[selectedIndex]);
@@ -256,21 +275,20 @@ public class SongSelectScreen extends ScreenAdapter {
         
         GlyphLayout layout = new GlyphLayout(game.neonFont, difText);
         float textX = centerX - layout.width / 2f;
-        
-        // ★変更点: layout.height ではなく getCapHeight() を使うことで、
-        // 数字のようなベースラインの影響を受けやすい文字を視覚的な中心に配置します。
+
         float textY = centerY + 25 + game.neonFont.getCapHeight() / 2f; 
         
         game.neonFont.draw(game.batch, difText, textX, textY);
     }
 
-    // ★修正: 曲名の表示位置を微調整
     void drawSongList(float delta) {
+        // 曲リスト描画
         if (panelImg == null) return;
         float aspectRatio = (float)panelImg.getHeight() / (float)panelImg.getWidth();
         float centerY = GameConfig.SCREEN_HEIGHT / 2f;
         
         for (int i = 0; i < songs.length; i++) {
+            // 各曲パネル描画
             float distance = i - currentScroll;
             if (Math.abs(distance) > 5.0f) continue;
             
@@ -295,26 +313,29 @@ public class SongSelectScreen extends ScreenAdapter {
             // 文字設定
             game.neonFont.getData().setScale(0.25f * scale); 
             
+            // 色設定
             Color c = (i == selectedIndex) ? Color.WHITE : new Color(0.7f, 0.7f, 0.7f, 1f);
             game.neonFont.setColor(c.r, c.g, c.b, alpha);
             
+            // 文字描画
             String songText = songs[i];
             GlyphLayout layout = new GlyphLayout(game.neonFont, songText);
             
-            // ★変更点: 固定値(+130)ではなく、画像の幅に基づいて中心を計算
+            // 中央揃え計算
             float imgCenterX = imgDrawX + (imgW / 2f);
             float textX = imgCenterX - (layout.width / 2f);
-            
-            // ★変更点: 垂直方向もCapHeightを使用して、フォントの「サイズ感」によるズレを解消
-            // itemY はパネルの垂直中心なので、そこからCapHeightの半分を足す
-            float textY = itemY + 15 + (game.neonFont.getCapHeight() / 2f); 
-            
+
+            float textY = itemY + 15 + (game.neonFont.getCapHeight() / 2f);
+
+            // 描画
             game.neonFont.draw(game.batch, songText, textX, textY);
         }
         game.batch.setColor(1, 1, 1, 1);
     }
 
     void drawUI(float delta) {
+        // 画面UI描画
+        // 操作ガイド
         game.font.getData().setScale(1.5f);
         game.font.setColor(Color.LIGHT_GRAY);
         game.font.draw(game.batch, "[SPACE] START   [O] OPTION", 20, 50);
@@ -322,6 +343,7 @@ public class SongSelectScreen extends ScreenAdapter {
     }
 
     void handleInput() {
+        // 入力処理
         if (Gdx.input.isKeyJustPressed(Input.Keys.UP)) {
             selectedIndex--; if (selectedIndex < 0) selectedIndex = songs.length - 1; playPreview(songs[selectedIndex]);
         }
@@ -334,6 +356,7 @@ public class SongSelectScreen extends ScreenAdapter {
     }
 
     private void manualDisposeHeavyAssets() {
+        // 重いアセットを手動で解放
         System.out.println("Switching screens: Unloading heavy assets from Manager...");
         for (int i = 1; i <= TOTAL_LOOP_FRAMES; i++) {
             String path = String.format(LOOP_PATH, i);
@@ -350,6 +373,7 @@ public class SongSelectScreen extends ScreenAdapter {
 
     @Override
     public void dispose() {
+        // 画面破棄処理
         if (!assetsDisposed) manualDisposeHeavyAssets();
         if (previewMusic != null) previewMusic.dispose();
         if (shapeRenderer != null) shapeRenderer.dispose();

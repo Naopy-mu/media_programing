@@ -17,11 +17,13 @@ public class NoteManager {
     public float offset = 0f;
 
     public NoteManager(String songName, float defaultBpm) {
+        // 譜面データ読み込み
         notes = new Array<>();
         loadChart(songName, defaultBpm);
     }
 
     private void loadChart(String songName, float defaultBpm) {
+        // 譜面データ読み込み処理
         FileHandle file = null;
         FileHandle localFile = Gdx.files.local("assets/charts/" + songName + ".json");
         FileHandle internalFile = Gdx.files.internal("charts/" + songName + ".json");
@@ -42,11 +44,10 @@ public class NoteManager {
             // オフセット読み込み
             offset = root.getFloat("offset", 0f);
 
-            // ★修正ポイント：BPMイベント読み込み（デフォルト値を指定してエラー回避）
             JsonValue bpmList = root.get("bpmEvents");
             if (bpmList != null) {
+                // BPMイベント読み込み
                 for (JsonValue b : bpmList) {
-                    // time や bpm が省略されていてもエラーにならないように初期値を指定
                     float time = b.getFloat("time", 0f);
                     float bpm = b.getFloat("bpm", defaultBpm);
                     bpmEvents.add(new BpmEvent(time, bpm));
@@ -103,6 +104,7 @@ public class NoteManager {
     }
 
     private void calculateMaxCombo() {
+        // 最大コンボ数計算
         maxComboCount = 0;
         for (Note note : notes) {
             maxComboCount++;
@@ -121,7 +123,8 @@ public class NoteManager {
     }
 
     public float getBpmAt(float time) {
-        if (bpmEvents.size == 0) return 120f; // 安全策
+        // 指定時間のBPMを取得
+        if (bpmEvents.size == 0) return 120f;
         
         float bpm = bpmEvents.first().bpm;
         for (BpmEvent e : bpmEvents) {
@@ -132,16 +135,18 @@ public class NoteManager {
     }
 
     private void createFallbackNotes() {
+        // フォールバック譜面（テスト用）
         notes.add(new Note(2.0f, 0));
         notes.add(new Note(2.5f, 1));
         notes.add(new Note(3.0f, 2, 5.0f, true));
         notes.add(new Note(4.0f, 3));
     }
     
-    public int getMaxCombo() { return maxComboCount; }
-    public int getTotalNotes() { return notes.size; }
+    public int getMaxCombo() { return maxComboCount; }// 最大コンボ数取得
+    public int getTotalNotes() { return notes.size; }// 総ノーツ数取得
 
     public void checkMiss(float currentMusicTime, JudgeSystem judgeSystem) {
+        // ミス判定処理
         for (Note note : notes) {
             if (!note.active) continue;
             if (note.isHold && note.isHolding) continue;

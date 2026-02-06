@@ -17,18 +17,20 @@ public class TitleScreen extends ScreenAdapter {
     float time = 0;
 
     public TitleScreen(Main game) {
+        // コンストラクタ
         this.game = game;
         this.shapeRenderer = new ShapeRenderer();
     }
 
     @Override
     public void render(float delta) {
+        // 画面クリア
         Gdx.gl.glClearColor(0, 0, 0, 1);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
         time += delta;
 
-        // --- 1. 背景のグリッド演出 ---
+        // グリッド線の描画
         Gdx.gl.glEnable(GL20.GL_BLEND);
         shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
         shapeRenderer.setColor(0, 1, 1, 0.3f);
@@ -46,7 +48,7 @@ public class TitleScreen extends ScreenAdapter {
         }
         shapeRenderer.end();
         
-        // --- 2. 文字の描画 ---
+        // 文字の描画
         game.batch.begin();
 
         // タイトルロゴ
@@ -56,7 +58,7 @@ public class TitleScreen extends ScreenAdapter {
         String titleText = "RHYTHM GAME";
         GlyphLayout layout = new GlyphLayout(game.neonFont, titleText);
         float titleX = (GameConfig.SCREEN_WIDTH - layout.width) / 2;
-        float titleY = GameConfig.SCREEN_HEIGHT * 0.7f; // 画面の上の方(70%)
+        float titleY = GameConfig.SCREEN_HEIGHT * 0.7f;
         
         // 発光演出
         float glow = Math.abs(MathUtils.sin(time * 2));
@@ -70,8 +72,7 @@ public class TitleScreen extends ScreenAdapter {
             
             String pushText = "PRESS SPACE TO START";
             GlyphLayout pushLayout = new GlyphLayout(game.neonFont, pushText);
-            
-            // ★修正: 表示位置をもっと下げる (titleY - 350)
+
             game.neonFont.draw(game.batch, pushText, 
                 (GameConfig.SCREEN_WIDTH - pushLayout.width) / 2, 
                 titleY - 350); 
@@ -79,7 +80,7 @@ public class TitleScreen extends ScreenAdapter {
 
         game.batch.end();
 
-        // --- 3. 画面遷移 ---
+        // 画面遷移
         if (Gdx.input.isKeyJustPressed(Input.Keys.SPACE) || Gdx.input.isKeyJustPressed(Input.Keys.ENTER)) {
             game.setScreen(new TransitionScreen(game));
             dispose();
@@ -88,6 +89,7 @@ public class TitleScreen extends ScreenAdapter {
 
     @Override
     public void dispose() {
+        // リソース解放
         if (shapeRenderer != null) {
             shapeRenderer.dispose();
         }

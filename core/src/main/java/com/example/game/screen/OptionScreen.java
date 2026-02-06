@@ -19,6 +19,7 @@ public class OptionScreen extends ScreenAdapter {
     float currentOffset;
 
     public OptionScreen(Main game) {
+        // コンストラクタ
         this.game = game;
         // 保存されているデータを読み込む
         currentSpeed = GameConfig.getScrollSpeed();
@@ -38,13 +39,16 @@ public class OptionScreen extends ScreenAdapter {
 
         // 各項目を描画
         for (int i = 0; i < items.length; i++) {
+            // 項目のY座標計算
             float y = 600 - (i * 150);
             
             if (i == selectedIndex) {
+                // 選択中の項目
                 game.font.setColor(Color.YELLOW);
                 game.font.getData().setScale(2.5f);
                 game.font.draw(game.batch, "> " + items[i], GameConfig.SCREEN_WIDTH/2f - 400, y);
             } else {
+                // 通常の項目
                 game.font.setColor(Color.GRAY);
                 game.font.getData().setScale(2.0f);
                 game.font.draw(game.batch, items[i], GameConfig.SCREEN_WIDTH/2f - 400, y);
@@ -85,7 +89,8 @@ public class OptionScreen extends ScreenAdapter {
         }
 
         // 値の変更 (← →)
-        if (selectedIndex == 0) { // SPEED
+        if (selectedIndex == 0) { 
+            // SPEED
             if (Gdx.input.isKeyJustPressed(Input.Keys.RIGHT)) {
                 currentSpeed += 0.5f;
                 if (currentSpeed > 10.0f) currentSpeed = 10.0f;
@@ -96,7 +101,8 @@ public class OptionScreen extends ScreenAdapter {
                 if (currentSpeed < 1.0f) currentSpeed = 1.0f;
                 GameConfig.setScrollSpeed(currentSpeed); // 保存
             }
-        } else if (selectedIndex == 1) { // OFFSET
+        } else if (selectedIndex == 1) { 
+            // OFFSET
             if (Gdx.input.isKeyJustPressed(Input.Keys.RIGHT)) {
                 currentOffset += 0.01f;
                 GameConfig.setOffset(currentOffset); // 保存
@@ -105,9 +111,9 @@ public class OptionScreen extends ScreenAdapter {
                 currentOffset -= 0.01f;
                 GameConfig.setOffset(currentOffset); // 保存
             }
-        } else if (selectedIndex == 2) { // BACK
+        } else if (selectedIndex == 2) { 
+            // BACK
              if (Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) {
-                // ★修正：戻り先を TitleScreen ではなく SongSelectScreen に変更
                 game.setScreen(new SongSelectScreen(game));
                 dispose();
             }

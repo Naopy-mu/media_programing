@@ -16,11 +16,13 @@ public class TransitionScreen extends ScreenAdapter {
     final Main game;
     private AssetManager manager;
     
+    // 雨エフェクト用
     private float[] rainDrops;
     private char[] rainChars;
     private final int FONT_SIZE = 20;
     private int columns;
     
+    // アセットロード用
     private ShapeRenderer shapeRenderer;
     private float timeElapsed = 0;
     private float displayProgress = 0;
@@ -30,14 +32,15 @@ public class TransitionScreen extends ScreenAdapter {
     private final Color BAR_BG_COLOR = new Color(0f, 0.2f, 0.5f, 0.5f); 
 
     public TransitionScreen(Main game) {
+        // コンストラクタ
         this.game = game;
         this.manager = game.assetManager;
         this.shapeRenderer = new ShapeRenderer();
 
-        // 1. UI画像の予約
+        // UI画像の予約
         manager.load("song-select-UI.png", Texture.class);
         
-        // 2. 連番画像の予約
+        // 連番画像の予約
         final int LOOP_FRAMES = 192;
         final String LOOP_PATH = "tunnel/%05d.png";
         for (int i = 1; i <= LOOP_FRAMES; i++) {
@@ -61,19 +64,23 @@ public class TransitionScreen extends ScreenAdapter {
     }
 
     private char getRandomChar() {
+        // ランダムな文字を返す
         String chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ<>/@#&";
         return chars.charAt(MathUtils.random(chars.length() - 1));
     }
 
     @Override
     public void render(float delta) {
+        // 画面クリア
         ScreenUtils.clear(0, 0, 0, 1);
         timeElapsed += delta;
 
+        // アセットロード進行
         boolean isFinished = manager.update(); 
         float realProgress = manager.getProgress();
         displayProgress = MathUtils.lerp(displayProgress, realProgress, delta * 5.0f);
 
+        // 雨エフェクトの描画
         game.batch.begin();
         game.font.getData().setScale(1.0f);
         for (int i = 0; i < columns; i++) {
@@ -89,19 +96,23 @@ public class TransitionScreen extends ScreenAdapter {
         }
         game.batch.end();
 
+        // ロード進行バーとテキストの描画
         Gdx.gl.glEnable(GL20.GL_BLEND);
         shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
         shapeRenderer.setColor(THEME_COLOR);
         
+        // 四角形の枠
         float w = 600;
         float h = 200;
         float x = (GameConfig.SCREEN_WIDTH - w) / 2;
         float y = (GameConfig.SCREEN_HEIGHT - h) / 2;
         
+        // ランダムに揺らす
         float jitter = MathUtils.random(-1f, 1f);
         shapeRenderer.rect(x - jitter, y - jitter, w + jitter*2, h + jitter*2);
         shapeRenderer.end();
 
+        // 進行バーの描画
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
         shapeRenderer.setColor(BAR_BG_COLOR);
         float barWidth = 500;
@@ -110,27 +121,32 @@ public class TransitionScreen extends ScreenAdapter {
         float barY = y + 60;
         shapeRenderer.rect(barX, barY, barWidth, barHeight); 
         
+        // 進行部分
         shapeRenderer.setColor(THEME_COLOR);
         shapeRenderer.rect(barX, barY, barWidth * displayProgress, barHeight);
         shapeRenderer.end();
         Gdx.gl.glDisable(GL20.GL_BLEND);
 
+        // テキスト描画
         game.batch.begin();
         game.font.setColor(THEME_COLOR);
         game.font.getData().setScale(1.5f);
         
+        // 点滅カーソル
         String blink = (timeElapsed % 0.5f < 0.25f) ? "_" : "";
         if (realProgress >= 1.0f) loadingText = "LOAD COMPLETE";
         
+        // テキストとパーセンテージ表示
         game.font.draw(game.batch, loadingText + blink, x + 50, y + 160);
         game.font.draw(game.batch, (int)(displayProgress * 100) + "%", x + 500, y + 160);
         
+        // ロード済みアセット数表示
         game.font.getData().setScale(0.8f);
         game.font.setColor(0.5f, 0.8f, 1f, 1f); 
         game.font.draw(game.batch, "ASSETS: " + manager.getLoadedAssets(), x + 50, y + 70);
         game.batch.end();
 
-        // ★修正: ロードが終わったら選曲画面へ
+        // ロードが終わったら選曲画面へ
         if (isFinished && displayProgress >= 0.99f) {
             game.setScreen(new SongSelectScreen(game));
         }
@@ -138,6 +154,7 @@ public class TransitionScreen extends ScreenAdapter {
 
     @Override
     public void dispose() {
+        // リソース解放
         shapeRenderer.dispose();
     }
 }

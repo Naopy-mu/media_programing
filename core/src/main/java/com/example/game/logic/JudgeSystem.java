@@ -12,7 +12,7 @@ public class JudgeSystem {
     public float score = 0;
     public int combo = 0;
     
-    // ★追加: リザルト表示用の集計カウンター
+    // 最大コンボ数
     public int maxCombo = 0;
     public int perfectCount = 0; // Perfect!! (Cyan)
     public int greatCount = 0;   // Perfect (Yellow)
@@ -28,6 +28,7 @@ public class JudgeSystem {
     public float messageTimer = 0;
 
     public JudgeSystem(int maxPossibleCombo) {
+        // スコア計算用初期化
         if (maxPossibleCombo > 0) {
             scorePerCombo = 1000000f / maxPossibleCombo;
         }
@@ -44,12 +45,14 @@ public class JudgeSystem {
     }
 
     public void update(float deltaTime) {
+        // メッセージタイマー更新
         if (messageTimer > 0) {
             messageTimer -= deltaTime;
         }
     }
 
     public Color checkHit(float targetTime, float songPosition) {
+        // ヒット判定処理
         float diff = targetTime - songPosition;
         float absDiff = Math.abs(diff);
 
@@ -61,6 +64,7 @@ public class JudgeSystem {
         increaseCombo(); // コンボ加算処理を共通化
 
         if (absDiff <= WINDOW_THEORY) {
+            // 理論値パーフェクト
             message = "PERFECT!!";
             messageColor = Color.CYAN;
             timingMessage = ""; 
@@ -68,12 +72,14 @@ public class JudgeSystem {
             perfectCount++; // ★加算
             return Color.CYAN;
         } else if (absDiff <= WINDOW_PERFECT) {
+            // パーフェクト
             message = "PERFECT";
             messageColor = Color.YELLOW;
             score += scorePerCombo;
             greatCount++;   // ★加算
             return Color.YELLOW;
         } else {
+            // グッド
             if (comboStatus == 0) comboStatus = 1;
             message = "GOOD";
             messageColor = Color.GREEN;
@@ -85,35 +91,41 @@ public class JudgeSystem {
 
     // コンボ処理の共通化
     private void increaseCombo() {
+        // コンボ加算処理
         combo++;
         if (combo > maxCombo) maxCombo = combo; // 最大コンボ更新
     }
 
     public void addHoldCombo() {
+        // ホールド中のコンボ加算
         increaseCombo();
         score += scorePerCombo;
     }
 
     public void finishHold() {
+        // ホールド終了時のコンボ加算
         increaseCombo();
         score += scorePerCombo;
     }
 
     public void miss() {
+        // ミス処理
         message = "MISS...";
         timingMessage = "";
         messageColor = Color.GRAY;
         messageTimer = 1.0f;
         combo = 0;
         comboStatus = 2;
-        missCount++; // ★加算
+        missCount++;
     }
     
     public void applyResult(String result) {
+        // 結果適用
         if ("MISS".equals(result)) miss();
     }
 
     public void resetCombo() {
+        // コンボリセット処理
         if (combo > 0) {
             combo = 0;
             comboStatus = 2;
@@ -122,6 +134,7 @@ public class JudgeSystem {
     }
     
     public String getRank() {
+        // ランク計算
         if (score >= 980000) return "S+"; 
         if (score >= 950000) return "S";
         if (score >= 900000) return "A";

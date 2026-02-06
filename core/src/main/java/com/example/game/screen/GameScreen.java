@@ -21,6 +21,7 @@ import com.example.game.logic.JudgeSystem;
 import com.example.game.logic.NoteManager;
 
 public class GameScreen extends ScreenAdapter {
+    //変数群
     final Main game;
     String songName; 
     
@@ -71,6 +72,7 @@ public class GameScreen extends ScreenAdapter {
     float resumeTimer = 0;
 
     public GameScreen(Main game, String songName) {
+        //メインスクリーン処理
         this.game = game;
         this.songName = songName;
 
@@ -90,7 +92,6 @@ public class GameScreen extends ScreenAdapter {
         shapeRenderer = new ShapeRenderer();
         noteImg = new Texture("notes-UI.png");
         
-        // ★追加: 背景画像の読み込み
         try {
             backgroundTexture = new Texture(Gdx.files.internal(songName + ".png"));
             backgroundTexture.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
@@ -111,8 +112,10 @@ public class GameScreen extends ScreenAdapter {
         music = Gdx.audio.newMusic(Gdx.files.internal(songName + ".mp3"));
         music.setVolume(0.3f);
         
+        // 曲終了時の処理設定
         music.setOnCompletionListener(m -> forceFinishGame());
         
+        //サウンド読み込み
         try { hitSound = Gdx.audio.newSound(Gdx.files.internal("hit.mp3")); } catch (Exception e) {}
         try { countSound = Gdx.audio.newSound(Gdx.files.internal("count.mp3")); } catch (Exception e) {}
 
@@ -125,12 +128,12 @@ public class GameScreen extends ScreenAdapter {
 
     @Override
     public void render(float delta) {
+        //レンダリング処理
         ScreenUtils.clear(0, 0, 0, 1);
 
-        // ★追加: 背景ジャケットの描画 (一番最初に描画する)
         if (backgroundTexture != null) {
             game.batch.begin();
-            // かなり暗く(0.3)、透明度も高く(0.4)設定して、プレイの邪魔にならないようにする
+            // かなり暗く(0.6)、透明度も高く(0.5)設定して、プレイの邪魔にならないようにする
             game.batch.setColor(0.6f, 0.6f, 0.6f, 0.5f);
             game.batch.draw(backgroundTexture, 0, 0, GameConfig.SCREEN_WIDTH, GameConfig.SCREEN_HEIGHT);
             game.batch.end();
@@ -193,14 +196,14 @@ public class GameScreen extends ScreenAdapter {
     }
 
     private void forceFinishGame() {
+        // 強制的にゲームを終了してリザルト画面へ移行
         if (music != null) {
             music.setOnCompletionListener(null);
             music.stop();
         }
-        // ★修正: songName を渡す
         game.setScreen(new ResultScreen(
             game, 
-            songName, // 曲名
+            songName,
             (int)judgeSystem.score, 
             judgeSystem.maxCombo, 
             judgeSystem.perfectCount, 
@@ -211,8 +214,8 @@ public class GameScreen extends ScreenAdapter {
         dispose();
     }
 
-    // --- 以下、描画・ロジックメソッド（変更なし） ---
     void drawBeatLines() {
+        // ビートライン描画処理
         Gdx.gl.glEnable(GL20.GL_BLEND);
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
         shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
@@ -250,6 +253,7 @@ public class GameScreen extends ScreenAdapter {
     }
 
     void updateCountdown(float delta) {
+        // カウントダウン更新処理
         countdownTimer += delta;
         if (countdownTimer < 0) return;
         if (countIndex < 4) {
@@ -266,6 +270,7 @@ public class GameScreen extends ScreenAdapter {
     }
 
     void updateResumeCountdown(float delta) {
+        // レジュームカウントダウン更新処理
         int prevCeil = (int)Math.ceil(resumeTimer);
         resumeTimer -= delta;
         int currentCeil = (int)Math.ceil(resumeTimer);
@@ -279,6 +284,7 @@ public class GameScreen extends ScreenAdapter {
     }
 
     void updateHolds(float delta) {
+        // ホールドノート更新処理
         float currentDisplayTime = songPosition - userOffset;
         for (Note note : noteManager.notes) {
             if (!note.isHold || !note.active) continue;
@@ -309,6 +315,7 @@ public class GameScreen extends ScreenAdapter {
     }
 
     void processHit(int lane) {
+        // ヒット処理
         for (Note note : noteManager.notes) {
             if (note.lane != lane || !note.active) continue;
             if (note.isHold && note.isHolding) continue;
@@ -329,6 +336,7 @@ public class GameScreen extends ScreenAdapter {
     }
 
     void drawHoldBodies() {
+        // ホールドノート本体描画処理
         Gdx.gl.glEnable(GL20.GL_BLEND);
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
@@ -358,6 +366,7 @@ public class GameScreen extends ScreenAdapter {
     }
 
     void drawSyncLines() {
+        // シンクライン描画処理
         Gdx.gl.glEnable(GL20.GL_BLEND);
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
@@ -385,6 +394,7 @@ public class GameScreen extends ScreenAdapter {
     }
 
     void drawNotes() {
+        // ノート描画処理
         game.batch.begin();
         game.batch.setColor(Color.WHITE);
         for (Note note : noteManager.notes) {
@@ -407,9 +417,11 @@ public class GameScreen extends ScreenAdapter {
     }
 
     void drawUI() {
+        // UI描画処理
         game.batch.begin();
         
         if (!isPlaying && !isPaused && !isResuming) { 
+            // カウントダウン表示
             game.font.setColor(Color.YELLOW);
             game.font.getData().setScale(3.0f);
             if (countdownTimer >= 0) {
@@ -419,6 +431,7 @@ public class GameScreen extends ScreenAdapter {
         }
 
         if (isResuming) {
+            // レジュームカウントダウン表示
             game.font.setColor(Color.CYAN);
             game.font.getData().setScale(5.0f); 
             int count = (int)Math.ceil(resumeTimer);
@@ -426,6 +439,7 @@ public class GameScreen extends ScreenAdapter {
         }
 
         if (judgeSystem.messageTimer > 0) {
+            // 判定メッセージ表示
             float maxTime = judgeSystem.message.startsWith("MISS") ? 1.0f : 0.5f;
             float progress = judgeSystem.messageTimer / maxTime;
             float baseScale = 2.5f;
@@ -440,6 +454,7 @@ public class GameScreen extends ScreenAdapter {
             game.font.draw(game.batch, judgeSystem.message, CENTER_X - (50 * animScale), 450 + (progress * 20));
 
             if (!judgeSystem.timingMessage.isEmpty()) {
+                // FAST/LATEメッセージ表示
                 if (judgeSystem.timingMessage.equals("FAST")) game.font.setColor(1, 0, 0, alpha);
                 else game.font.setColor(0, 0, 1, alpha);
                 game.font.getData().setScale(1.5f);
@@ -458,6 +473,7 @@ public class GameScreen extends ScreenAdapter {
         game.font.draw(game.batch, "Score: " + (int)judgeSystem.score, 20, 930);
 
         if (judgeSystem.combo > 0) {
+            // コンボ表示
             switch (judgeSystem.comboStatus) {
                 case 0: game.neonFont.setColor(Color.CYAN); break; 
                 case 1: game.neonFont.setColor(Color.GOLD); break; 
@@ -469,7 +485,7 @@ public class GameScreen extends ScreenAdapter {
             
             GlyphLayout layout = new GlyphLayout(game.neonFont, comboText);
             float comboX = CENTER_X - layout.width / 2f;
-            float comboY = JUDGEMENT_LINE_Y + 200; // コンボ表示位置 (判定文字より上)
+            float comboY = JUDGEMENT_LINE_Y + 200;
             
             game.neonFont.draw(game.batch, comboText, comboX, comboY);
         }
@@ -481,10 +497,11 @@ public class GameScreen extends ScreenAdapter {
         game.batch.end();
     }
 
-    void pauseGame() { isPaused = true; if (music.isPlaying()) music.pause(); pauseIndex = 0; }
-    void resumeGame() { isPaused = false; isResuming = true; resumeTimer = 3.0f; }
+    void pauseGame() { isPaused = true; if (music.isPlaying()) music.pause(); pauseIndex = 0; }// ゲーム一時停止処理
+    void resumeGame() { isPaused = false; isResuming = true; resumeTimer = 3.0f; }// ゲーム再開処理
     
     void restartGame() {
+        // ゲーム再スタート処理
         music.setOnCompletionListener(null);
         music.stop(); 
         music.setOnCompletionListener(m -> forceFinishGame());
@@ -503,6 +520,7 @@ public class GameScreen extends ScreenAdapter {
     }
 
     private void returnToSongSelect() {
+        // 曲選択画面に戻る処理
         if (isQuitting) return;
         isQuitting = true;
         Gdx.app.postRunnable(new Runnable() {
@@ -516,6 +534,7 @@ public class GameScreen extends ScreenAdapter {
     }
 
     void handlePauseInput() {
+        // 一時停止メニュー入力処理
         if (Gdx.input.isKeyJustPressed(Input.Keys.UP)) { pauseIndex--; if (pauseIndex < 0) pauseIndex = pauseItems.length - 1; }
         if (Gdx.input.isKeyJustPressed(Input.Keys.DOWN)) { pauseIndex++; if (pauseIndex >= pauseItems.length) pauseIndex = 0; }
         if (Gdx.input.isKeyJustPressed(Input.Keys.SPACE) || Gdx.input.isKeyJustPressed(Input.Keys.ENTER)) {
@@ -525,6 +544,7 @@ public class GameScreen extends ScreenAdapter {
     }
 
     void drawPauseMenu() {
+        // 一時停止メニュー描画処理
         Gdx.gl.glEnable(GL20.GL_BLEND);
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
@@ -551,7 +571,8 @@ public class GameScreen extends ScreenAdapter {
         game.batch.end();
     }
 
-    void drawLanes() { /* (省略: 変更なし) */ 
+    void drawLanes() {
+        // レーン描画処理
         Gdx.gl.glEnable(GL20.GL_BLEND);
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
@@ -593,7 +614,8 @@ public class GameScreen extends ScreenAdapter {
         Gdx.gl.glDisable(GL20.GL_BLEND);
     }
 
-    void drawEffects() { /* (省略: 変更なし) */
+    void drawEffects() {
+        // エフェクト描画処理
         Gdx.gl.glEnable(GL20.GL_BLEND);
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE);
         shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
@@ -612,10 +634,11 @@ public class GameScreen extends ScreenAdapter {
         Gdx.gl.glDisable(GL20.GL_BLEND);
     }
 
-    float getScale(float zDistance) { return CAMERA_DEPTH / (CAMERA_DEPTH + zDistance); }
-    float getScreenY(float scale) { return VANISHING_POINT_Y - (VANISHING_POINT_Y - JUDGEMENT_LINE_Y) * scale; }
-    float getLaneWidth(float scale) { return NEAR_WIDTH_TOTAL * scale / 4.0f; }
+    float getScale(float zDistance) { return CAMERA_DEPTH / (CAMERA_DEPTH + zDistance); }// 遠近法スケール計算
+    float getScreenY(float scale) { return VANISHING_POINT_Y - (VANISHING_POINT_Y - JUDGEMENT_LINE_Y) * scale; }// スクリーンY座標計算
+    float getLaneWidth(float scale) { return NEAR_WIDTH_TOTAL * scale / 4.0f; }// レーン幅計算
     float getLaneCenterX(int lane, float scale) {
+        // レーン中心X座標計算
         float totalW = NEAR_WIDTH_TOTAL * scale;
         float startX = CENTER_X - (totalW / 2.0f);
         float oneLaneW = totalW / 4.0f;
@@ -624,6 +647,7 @@ public class GameScreen extends ScreenAdapter {
 
     @Override
     public void dispose() {
+        //リソース解放処理
         try {
             if (shapeRenderer != null) shapeRenderer.dispose();
             if (noteImg != null) noteImg.dispose();

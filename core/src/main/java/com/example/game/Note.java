@@ -9,20 +9,22 @@ public class Note {
     public boolean isHold;   
     public boolean isHolding; 
 
-    // ★追加：ホールド時のコンボ計算用タイマー
+    // ホールド時のコンボ計算用タイマー
     public float holdTimer; 
 
     public Note(float targetTime, int lane) {
+        // 通常ノート用コンストラクタ
         this(targetTime, lane, 0, false);
     }
 
     public Note(float targetTime, int lane, float endTime, boolean isHold) {
-        this.targetTime = targetTime;
-        this.lane = lane;
-        this.active = true;
-        this.endTime = endTime;
-        this.isHold = isHold;
-        this.isHolding = false;
+        // コンストラクタ
+        this.targetTime = targetTime;// ノーツの時間
+        this.lane = lane;// レーン
+        this.active = true;// アクティブ状態
+        this.endTime = endTime;// ホールド終了時間
+        this.isHold = isHold;// ホールドノートか
+        this.isHolding = false;// ホールド中か
         this.holdTimer = 0f; // 初期化
     }
 

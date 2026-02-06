@@ -7,8 +7,10 @@ import com.badlogic.gdx.Gdx;
 import java.util.Iterator;
 
 public class EffectManager {
+    
     // 内部クラス定義（publicにして外から見えるようにする）
     public static class Particle {
+        // パーティクル情報
         public float x, y, vx, vy, life, maxLife;
         public Color color;
         Particle(float x, float y, Color c) {
@@ -24,6 +26,7 @@ public class EffectManager {
     }
 
     public static class Ripple {
+        // リップル情報
         public float x, y, radius, maxRadius, life;
         public Color color;
         Ripple(float x, float y, float width, Color c) {
@@ -39,6 +42,7 @@ public class EffectManager {
     public Array<Ripple> ripples = new Array<>();
 
     public void spawn(float x, float y, float width, Color color) {
+        // エフェクト生成
         ripples.add(new Ripple(x, y, width, color));
         for (int i = 0; i < 20; i++) particles.add(new Particle(x, y, color));
     }

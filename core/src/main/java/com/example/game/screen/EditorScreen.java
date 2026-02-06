@@ -24,6 +24,7 @@ import com.example.game.Note;
 import java.util.Comparator;
 
 public class EditorScreen extends ScreenAdapter {
+    // 編集画面本体
     final Main game;
     String songName;
     Music music;
@@ -60,6 +61,7 @@ public class EditorScreen extends ScreenAdapter {
     Rectangle btnTap, btnHold;
 
     public EditorScreen(Main game, String songName) {
+        // コンストラクタ
         this.game = game;
         this.songName = songName;
 
@@ -91,6 +93,7 @@ public class EditorScreen extends ScreenAdapter {
         loadExistingChart();
 
         if (bpmEvents.size == 0) {
+            // デフォルトBPMイベント追加
             float initialBpm = 120f;
             if (songName.equals("Link Layer")) initialBpm = 156;
             else if (songName.equals("Pop!Stack!")) initialBpm = 160;
@@ -104,6 +107,7 @@ public class EditorScreen extends ScreenAdapter {
 
     @Override
     public void render(float delta) {
+        // メインレンダリング処理
         Gdx.gl.glClearColor(0.1f, 0.1f, 0.1f, 1);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
@@ -115,25 +119,22 @@ public class EditorScreen extends ScreenAdapter {
                 float rawPosition = music.getPosition();
                 
                 if (Math.abs(smoothTime - rawPosition) > 0.05f) {
+                    // 大きくずれたら強制補正
                     smoothTime = rawPosition;
                 }
 
-                // ノーツ音再生
-                // lastHitCheckTime(前回) と smoothTime(今回) の間にあるノーツを探す
-                // ※ノーツの時間は「オフセットが引かれた状態（譜面時間）」なので、
-                //   判定する際は 再生時間からオフセットを引いて比較する必要があります。
                 float currentChartTime = smoothTime - offset;
                 float prevChartTime = lastHitCheckTime - offset;
 
                 for (Note note : notes) {
-                    // note.targetTime は譜面時間 (0秒~)
+                    // ノーツヒット音再生
                     if (note.targetTime > prevChartTime && note.targetTime <= currentChartTime) {
                         if (hitSound != null) hitSound.play(0.5f);
                     }
                 }
                 
-                // メトロノーム再生
                 if (isMetronomeOn) {
+                    // メトロノーム音再生
                     playMetronome(lastFrameTime, smoothTime);
                 }
                 
@@ -173,12 +174,11 @@ public class EditorScreen extends ScreenAdapter {
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
         for (Note note : notes) {
             float x = LANE_START_X + note.lane * LANE_WIDTH;
-            
-            // ノーツの描画位置： (ターゲット時間 + オフセット) * スケール
-            // 譜面上の 0秒 は、画面上では offset秒 の位置にあるべき
+
             float y = (note.targetTime + offset) * PIXELS_PER_SECOND;
             
             if (note.isHold) {
+                // ホールドノーツ描画
                 float endY = (note.endTime + offset) * PIXELS_PER_SECOND;
                 shapeRenderer.setColor(0, 1, 1, 0.5f);
                 shapeRenderer.rect(x + 5, y, LANE_WIDTH - 10, endY - y);
@@ -188,6 +188,7 @@ public class EditorScreen extends ScreenAdapter {
         }
         
         if (tempHoldStart != null) {
+            // ホールドノーツ編集中の描画
             float x = LANE_START_X + tempHoldStart.lane * LANE_WIDTH;
             float startY = (tempHoldStart.targetTime + offset) * PIXELS_PER_SECOND;
             
@@ -247,6 +248,7 @@ public class EditorScreen extends ScreenAdapter {
         game.font.draw(game.batch, String.format("Offset: %.3f", offset), 20, uiTop - 150);
         
         if (isMetronomeOn) {
+            // メトロノームON表示
             game.font.setColor(Color.GREEN);
             game.font.draw(game.batch, "Metronome: ON [M]", 20, uiTop - 180);
         } else {
@@ -278,6 +280,7 @@ public class EditorScreen extends ScreenAdapter {
         }
         
         if (tempHoldStart != null) {
+            // ホールド編集中メッセージ
             game.font.setColor(Color.ORANGE);
             game.font.draw(game.batch, ">> CLICK TO END HOLD <<", 300, 170);
         }
@@ -287,13 +290,12 @@ public class EditorScreen extends ScreenAdapter {
         handleInput();
     }
 
-    // ★修正: メトロノーム同期ロジック（完全版）
     void playMetronome(float prevTime, float currTime) {
-        // 現在の「譜面上の時間」に変換してから計算する
+        // メトロノーム音再生処理
         float currChartTime = currTime - offset;
         float prevChartTime = prevTime - offset;
 
-        // オフセットより前（曲は流れているが譜面は始まっていない）なら鳴らさない
+        // 譜面時間が負なら無視
         if (currChartTime < 0) return;
 
         BpmEvent event = getBpmAt(currChartTime);
@@ -317,8 +319,8 @@ public class EditorScreen extends ScreenAdapter {
         }
     }
 
-    // ★修正: グリッド描画もオフセットを基準にする
     void drawDynamicGrid() {
+        // 動的グリッド描画処理
         float screenBottomY = currentScrollY - 200;
         float screenTopY = currentScrollY + GameConfig.SCREEN_HEIGHT + 200;
 
@@ -326,13 +328,12 @@ public class EditorScreen extends ScreenAdapter {
         float chartTimeIterator = 0;
         int eventIndex = 0;
 
-        // 譜面の終わりまで（十分大きな値まで）ループ
-        // 実際には画面外は描画しないのでループは回るが描画負荷は低い
-        // ただし無限ループ防止のため画面上端の時間+予備までを上限とする
+        // 最大譜面時間計算
         float maxChartTime = (screenTopY / PIXELS_PER_SECOND) - offset;
-        if (maxChartTime < 0) return; // まだ譜面エリアが見えてない
+        if (maxChartTime < 0) return;
 
         while (chartTimeIterator < maxChartTime) {
+            // 現在のBPMイベントを取得
             BpmEvent currentEvent = bpmEvents.get(eventIndex);
             float currentBpm = currentEvent.bpm;
             
@@ -348,12 +349,11 @@ public class EditorScreen extends ScreenAdapter {
             if (chartTimeIterator < currentEvent.time) chartTimeIterator = currentEvent.time;
 
             while (chartTimeIterator < nextChangeChartTime && chartTimeIterator < maxChartTime) {
-                // 描画位置Y = (譜面時間 + オフセット) * スケール
+                // グリッド線のY座標計算
                 float y = (chartTimeIterator + offset) * PIXELS_PER_SECOND;
 
                 if (y > screenBottomY) {
-                    // 1拍判定
-                    // イベント開始からの経過時間を1拍で割って整数に近いか
+                    // グリッド線描画
                     double beatsFromEvent = (chartTimeIterator - currentEvent.time) / beatDuration;
                     boolean isBeat = Math.abs(beatsFromEvent - Math.round(beatsFromEvent)) < 0.01;
 
@@ -370,6 +370,7 @@ public class EditorScreen extends ScreenAdapter {
     }
 
     void handleInput() {
+        // 入力処理
         if (Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) {
             isPlaying = !isPlaying;
             if (isPlaying) {
@@ -420,7 +421,7 @@ public class EditorScreen extends ScreenAdapter {
         // BPM変更点追加
         if (Gdx.input.isKeyJustPressed(Input.Keys.B)) {
             float nowChartTime = (currentScrollY / PIXELS_PER_SECOND) - offset;
-            if (nowChartTime < 0) nowChartTime = 0; // 負の時間は0に丸める
+            if (nowChartTime < 0) nowChartTime = 0;
 
             BpmEvent existing = null;
             for(BpmEvent e : bpmEvents) {
@@ -434,11 +435,13 @@ public class EditorScreen extends ScreenAdapter {
         }
 
         if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
+            // 終了処理
              music.stop();
              game.setScreen(new DevSelectScreen(game));
         }
 
         if (!isPlaying) {
+            // スクロール操作
             float scrollAmt = 10;
             if (shiftPressed) scrollAmt = 50;
 
@@ -450,6 +453,7 @@ public class EditorScreen extends ScreenAdapter {
     }
 
     void seekMusic(float amount) {
+        // 音楽シーク処理
         float currentPos = currentScrollY / PIXELS_PER_SECOND;
         float newPos = currentPos + amount;
         if (newPos < 0) newPos = 0;
@@ -465,6 +469,7 @@ public class EditorScreen extends ScreenAdapter {
     }
 
     BpmEvent getBpmAt(float chartTime) {
+        // 指定譜面時間のBPMイベント取得
         BpmEvent target = bpmEvents.first();
         for (BpmEvent e : bpmEvents) {
             if (e.time <= chartTime) target = e;
@@ -473,9 +478,8 @@ public class EditorScreen extends ScreenAdapter {
         return target;
     }
 
-    // ★修正: クリック座標を譜面時間に変換
     float getSnappedChartTime(float y) {
-        // まず画面Y座標を音楽時間(MusicTime)に変換
+        // 指定Y座標からスナップされた譜面時間を取得する
         float musicTime = y / PIXELS_PER_SECOND;
         
         // そこからオフセットを引いて譜面時間(ChartTime)にする
@@ -493,15 +497,18 @@ public class EditorScreen extends ScreenAdapter {
     }
     
     void sortBpmEvents() {
+        // BPMイベントソート
         bpmEvents.sort((o1, o2) -> Float.compare(o1.time, o2.time));
     }
 
     void loadExistingChart() {
+        // 既存譜面読み込み処理
         FileHandle file = Gdx.files.internal("charts/" + songName + ".json");
         FileHandle localFile = Gdx.files.local("assets/charts/" + songName + ".json");
         if (localFile.exists()) file = localFile;
 
         if (file.exists()) {
+            // 既存譜面読み込み
             try {
                 Json json = new Json();
                 ChartData data = json.fromJson(ChartData.class, file);
@@ -520,6 +527,7 @@ public class EditorScreen extends ScreenAdapter {
     }
 
     void saveChart() {
+        // 譜面保存処理
         notes.sort((o1, o2) -> Float.compare(o1.targetTime, o2.targetTime));
         sortBpmEvents();
 
@@ -537,6 +545,7 @@ public class EditorScreen extends ScreenAdapter {
     }
 
     class EditorInputProcessor extends InputAdapter {
+        // エディター用入力処理
         @Override
         public boolean touchDown(int screenX, int screenY, int pointer, int button) {
             float uiY = GameConfig.SCREEN_HEIGHT - screenY;
@@ -604,6 +613,7 @@ public class EditorScreen extends ScreenAdapter {
 
         @Override
         public boolean scrolled(float amountX, float amountY) {
+            // スクロールホイール処理
             if (!isPlaying) {
                 float scrollAmt = amountY * 0.5f; 
                 seekMusic(scrollAmt); 
@@ -613,6 +623,7 @@ public class EditorScreen extends ScreenAdapter {
     }
 
     public static class ChartData {
+        // 譜面データ保存用クラス
         public Array<Note> notes;
         public Array<BpmEvent> bpmEvents;
         public float offset = 0;
@@ -620,6 +631,7 @@ public class EditorScreen extends ScreenAdapter {
 
     @Override
     public void dispose() {
+        // リソース解放処理
         shapeRenderer.dispose();
         music.dispose();
     }

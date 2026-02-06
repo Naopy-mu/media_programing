@@ -7,6 +7,7 @@ public class BpmEvent {
     public BpmEvent() {} // JSON用
 
     public BpmEvent(float time, float bpm) {
+        // コンストラクタ
         this.time = time;
         this.bpm = bpm;
     }
