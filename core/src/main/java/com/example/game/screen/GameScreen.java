@@ -30,6 +30,7 @@ public class GameScreen extends ScreenAdapter {
 
     ShapeRenderer shapeRenderer;
     Texture noteImg;
+    Texture backgroundTexture;
     Music music;
     Sound hitSound;
     Sound countSound; 
@@ -89,6 +90,14 @@ public class GameScreen extends ScreenAdapter {
         shapeRenderer = new ShapeRenderer();
         noteImg = new Texture("notes-UI.png");
         
+        // ★追加: 背景画像の読み込み
+        try {
+            backgroundTexture = new Texture(Gdx.files.internal(songName + ".png"));
+            backgroundTexture.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
+        } catch (Exception e) {
+            Gdx.app.error("GameScreen", "Could not load background for: " + songName);
+        }
+
         noteManager = new NoteManager(songName, initialBpm);
         this.userOffset = GameConfig.getOffset() + noteManager.offset;
 
@@ -117,6 +126,15 @@ public class GameScreen extends ScreenAdapter {
     @Override
     public void render(float delta) {
         ScreenUtils.clear(0, 0, 0, 1);
+
+        // ★追加: 背景ジャケットの描画 (一番最初に描画する)
+        if (backgroundTexture != null) {
+            game.batch.begin();
+            // かなり暗く(0.3)、透明度も高く(0.4)設定して、プレイの邪魔にならないようにする
+            game.batch.setColor(0.3f, 0.3f, 0.3f, 0.4f);
+            game.batch.draw(backgroundTexture, 0, 0, GameConfig.SCREEN_WIDTH, GameConfig.SCREEN_HEIGHT);
+            game.batch.end();
+        }
 
         if (Gdx.input.isKeyJustPressed(Input.Keys.F1)) {
             forceFinishGame();

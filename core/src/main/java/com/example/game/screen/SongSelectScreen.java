@@ -12,6 +12,7 @@ import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.Array;
+import com.badlogic.gdx.utils.ObjectMap;
 import com.example.game.GameConfig;
 import com.example.game.Main;
 
@@ -24,6 +25,9 @@ public class SongSelectScreen extends ScreenAdapter {
     int selectedIndex = 0;
     float currentScroll = 0;
     Texture panelImg;
+
+    // ★追加: ジャケット画像管理用マップ
+    ObjectMap<String, Texture> jackets = new ObjectMap<>();
 
     Animation<Texture> loopAnimation;
     Array<Texture> loopTextures;
@@ -59,6 +63,18 @@ public class SongSelectScreen extends ScreenAdapter {
             panelImg = game.assetManager.get("song-select-UI.png", Texture.class);
         } else {
             panelImg = new Texture("song-select-UI.png");
+        }
+
+        // ★追加: ジャケット画像の読み込み
+        for (String songName : songs) {
+            try {
+                Texture tex = new Texture(Gdx.files.internal(songName + ".png"));
+                // 拡大時にぼやけるようにフィルターを設定
+                tex.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
+                jackets.put(songName, tex);
+            } catch (Exception e) {
+                Gdx.app.error("SongSelect", "Could not load jacket for: " + songName);
+            }
         }
         
         shapeRenderer = new ShapeRenderer();
@@ -106,6 +122,17 @@ public class SongSelectScreen extends ScreenAdapter {
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT | GL20.GL_DEPTH_BUFFER_BIT | GL20.GL_STENCIL_BUFFER_BIT);
         
         updateLogic(delta);
+
+        // ★修正: 背景ジャケット描画
+        game.batch.begin();
+        Texture currentJacket = jackets.get(songs[selectedIndex]);
+        if (currentJacket != null) {
+            // 少し暗く(0.6)、少し透明に(0.8)して描画することで、擬似的なブラー効果とUIの引き立てを行う
+            game.batch.setColor(0.6f, 0.6f, 0.6f, 0.8f * uiAlpha);
+            game.batch.draw(currentJacket, 0, 0, GameConfig.SCREEN_WIDTH, GameConfig.SCREEN_HEIGHT);
+        }
+        game.batch.end();
+        
         drawCircularAnimation();
 
         if (currentState != State.PLAYING_INTRO) {
